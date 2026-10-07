@@ -130,6 +130,22 @@
   details.more[open] > summary svg { transform:rotate(45deg); }
   details.more > summary .opt { margin-left:auto; font-size:12px; font-weight:600; color:var(--stone); background:var(--surface-soft); padding:2px 8px; border-radius:9999px; }
   details.more[open] > summary { margin-bottom:4px; }
+  .steps { position:sticky; top:56px; z-index:4; display:grid; grid-template-columns:repeat(5,1fr); gap:4px; margin:0 -16px 16px; padding:10px 12px; background:var(--surface); border-bottom:1px solid var(--hairline-soft); }
+  .steps button { border:0; background:none; display:flex; flex-direction:column; align-items:center; gap:4px; font-size:12px; font-weight:600; color:var(--stone); padding:2px 0; }
+  .steps .dot { width:30px; height:30px; border-radius:9999px; border:1.5px solid #cfd3da; background:var(--canvas); display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; }
+  .steps .dot i { font-style:normal; }
+  .steps .dot svg { width:14px; height:14px; display:none; }
+  .steps .done .dot { background:var(--ok); border-color:var(--ok); }
+  .steps .done .dot i { display:none; }
+  .steps .done .dot svg { display:block; }
+  .steps .on { color:var(--ink); }
+  .steps .on .dot { border-color:var(--ink); box-shadow:0 0 0 3px rgba(10,10,10,.12); }
+  .steps .on:not(.done) .dot { background:var(--ink); color:#fff; }
+  .actbar { position:fixed; left:0; right:0; bottom:calc(64px + env(safe-area-inset-bottom)); z-index:5; display:flex; gap:8px; padding:10px 16px; background:var(--canvas); border-top:1px solid var(--hairline-soft); }
+  .actbar .btn { flex:1; }
+  .actbar #next { flex:2; }
+  .actbar svg { width:16px; height:16px; }
+  [data-sec] { padding-bottom:72px; }
   .hint-text { color:var(--steel); font-size:14px; margin:-8px 0 12px; }
 
   /* 목록 */
@@ -374,8 +390,30 @@ function go(v, arg) {
 }
 
 // ---------- 오늘 조회 (작성 중인 내용은 자동 임시저장) ----------
-let draft, moreOpen = {};
-const saveDraft = () => put('meta', { ...draft, id: 'draft' });
+let draft, moreOpen = {}, step = 1;
+const saveDraft = () => { refreshSteps(); return put('meta', { ...draft, id: 'draft' }); };
+
+// 오늘 조회는 5단계로 나눠 한 화면에 한 단계씩. 다 채운 단계는 탭에 체크 표시
+const STEPS = ['기본', '체크', '중점위험', '사진', '서명'];
+const stepDone = n => [
+  () => draft.site.trim() && draft.riskAssessed != null,
+  () => draft.items.length && draft.items.every(i => i.checked),
+  () => (draft.focusRisk || '').trim() && (draft.focusAction || '').trim(),
+  () => draft.photos.length,
+  () => draft.signs.length,
+][n - 1]();
+function refreshSteps() {
+  app.querySelectorAll('[data-step]').forEach(b => b.classList.toggle('done', !!stepDone(+b.dataset.step)));
+}
+function showStep(n) {
+  step = n;
+  app.querySelectorAll('[data-sec]').forEach(sec => sec.hidden = +sec.dataset.sec !== n);
+  app.querySelectorAll('[data-step]').forEach(b => b.classList.toggle('on', +b.dataset.step === n));
+  $('#prev').style.visibility = n === 1 ? 'hidden' : '';
+  $('#next').innerHTML = n === STEPS.length ? '조회 저장' : `다음 · ${STEPS[n]} ${I.chev}`;
+  refreshSteps();
+  window.scrollTo(0, 0);
+}
 
 async function newDraft() {
   const ts = await templates();
@@ -402,6 +440,9 @@ async function viewNew() {
     ${needBackup ? `<div class="card row" style="border-color:#ffd2c2;background:#fff7f4">
       <div class="grow"><b>${bk.drive ? '드라이브에 안 올라간 기록' : '백업 안 된 기록'} ${bk.pending}건</b><p class="muted" style="font-size:13px;color:var(--steel)">${bk.last ? `마지막 백업 ${stamp(bk.last)}` : '아직 백업한 적이 없어요'}</p></div>
       <button class="btn" id="goBackup">백업하기</button></div>` : ''}
+    <div class="steps">${STEPS.map((t, i) => `<button data-step="${i + 1}"><span class="dot"><i>${i + 1}</i>${I.check}</span>${t}</button>`).join('')}</div>
+
+    <div data-sec="1">
     <section class="hero">
       <div class="hero-top"><span class="badge-w">TODAY</span><span id="h-date"></span></div>
       <h1>오늘의 안전조회</h1>
@@ -430,7 +471,10 @@ async function viewNew() {
         <button data-ra="0" class="${draft.riskAssessed === false ? 'on' : ''}">아니오</button>
       </div>
     </div>
+    <button class="btn link full" id="reset">처음부터 다시 작성</button>
+    </div>
 
+    <div data-sec="2" hidden>
     <div class="card">
       <div class="sec-h"><span class="num">02</span><h2>위험성 체크리스트</h2><span class="meta" id="chk-meta"></span></div>
       <label class="f" for="tpl">작업 유형</label>
@@ -447,7 +491,9 @@ async function viewNew() {
         <button class="btn" id="addItem">추가</button>
       </div>
     </div>
+    </div>
 
+    <div data-sec="3" hidden>
     <div class="card">
       <div class="sec-h"><span class="num">03</span><h2>오늘의 중점 위험요인</h2></div>
       <p class="hint-text">오늘 가장 조심할 위험 1가지와 대책을 정해 다 같이 읽고 확인하세요.</p>
@@ -465,7 +511,9 @@ async function viewNew() {
       <label class="f" for="opinion">작업자 의견·건의사항</label>
       <textarea id="opinion" placeholder="작업자가 말한 위험요소, 불편한 점, 필요한 장비 등">${esc(draft.opinion)}</textarea>
     </details>
+    </div>
 
+    <div data-sec="4" hidden>
     <div class="card">
       <div class="sec-h"><span class="num">04</span><h2>조회 인증 사진</h2><span class="meta">${draft.photos.length}장</span></div>
       <div class="photos">
@@ -473,7 +521,9 @@ async function viewNew() {
         <label class="add-photo">${I.cam}사진 추가<input type="file" id="photo" accept="image/*" multiple hidden></label>
       </div>
     </div>
+    </div>
 
+    <div data-sec="5" hidden>
     <div class="card">
       <div class="sec-h"><span class="num">05</span><h2>참석자 서명</h2><span class="meta">${draft.signs.length}명</span></div>
       ${draft.signs.length ? draft.signs.map((s, i) => `
@@ -481,10 +531,14 @@ async function viewNew() {
         : '<p class="empty">아직 서명한 사람이 없습니다.</p>'}
       <button class="btn full" id="sign" style="margin-top:14px">${I.pen}서명 추가</button>
     </div>
+    </div>
 
-    <button class="btn full lg" id="save" style="margin-top:8px">조회 저장</button>
-    <button class="btn link full" id="reset">처음부터 다시 작성</button>`;
+    <div class="actbar"><button class="btn ter" id="prev">${I.back}이전</button><button class="btn" id="next"></button></div>`;
   refreshHero();
+  showStep(step);
+  app.querySelectorAll('[data-step]').forEach(b => b.onclick = () => showStep(+b.dataset.step));
+  $('#prev').onclick = () => showStep(step - 1);
+  $('#next').onclick = () => step < STEPS.length ? showStep(step + 1) : saveRecord();
   if (needBackup) $('#goBackup').onclick = () => go('records', 'backup');
 
   ['date', 'time', 'site', 'work', 'leader', 'focusRisk', 'focusAction', 'note', 'opinion'].forEach(k => $('#' + k).oninput = e => { draft[k] = e.target.value; saveDraft(); refreshHero(); });
@@ -519,20 +573,21 @@ async function viewNew() {
   app.querySelectorAll('[data-delphoto]').forEach(b => b.onclick = () => { if (confirm('사진을 지울까요?')) { draft.photos.splice(b.dataset.delphoto, 1); saveDraft(); viewNew(); } });
   app.querySelectorAll('[data-delsign]').forEach(b => b.onclick = () => { if (confirm('서명을 지울까요?')) { draft.signs.splice(b.dataset.delsign, 1); saveDraft(); viewNew(); } });
   $('#sign').onclick = () => openSignPad(leaders.concat(recs.flatMap(r => r.signs.map(s => s.name))));
-  $('#reset').onclick = async () => { if (confirm('작성 중인 내용을 모두 지울까요?')) { draft = await newDraft(); saveDraft(); viewNew(); } };
-  $('#save').onclick = async () => {
-    if (!draft.site.trim()) return alert('현장명을 입력하세요.');
-    if (draft.riskAssessed == null) return alert('위험성평가 실시 여부(예/아니오)를 골라 주세요.');
-    if (!(draft.focusRisk || '').trim() || !(draft.focusAction || '').trim()) return alert('오늘의 중점 위험요인과 대책을 적어 주세요.');
-    if (!draft.signs.length) return alert('서명이 한 명도 없습니다.');
+  $('#reset').onclick = async () => { if (confirm('작성 중인 내용을 모두 지울까요?')) { draft = await newDraft(); step = 1; saveDraft(); viewNew(); } };
+  const saveRecord = async () => {
+    const need = (n, msg) => { showStep(n); alert(msg); };
+    if (!draft.site.trim()) return need(1, '현장명을 입력하세요.');
+    if (draft.riskAssessed == null) return need(1, '위험성평가 실시 여부(예/아니오)를 골라 주세요.');
+    if (!(draft.focusRisk || '').trim() || !(draft.focusAction || '').trim()) return need(3, '오늘의 중점 위험요인과 대책을 적어 주세요.');
+    if (!draft.signs.length) return need(5, '서명이 한 명도 없습니다.');
     const left = draft.items.filter(i => !i.checked).length;
-    if (left && !confirm(`체크하지 않은 항목이 ${left}개 있습니다. 그대로 저장할까요?`)) return;
+    if (left) { showStep(2); if (!confirm(`체크하지 않은 항목이 ${left}개 있습니다. 그대로 저장할까요?`)) return; }
     const t = ts.find(t => t.id === draft.templateId);
     const rec = { ...draft, id: uid(), templateName: t ? t.name : '', savedAt: new Date().toISOString() };
     await put('records', rec);
     syncDrive();
     await del('meta', 'draft');
-    draft = null; moreOpen = {};
+    draft = null; moreOpen = {}; step = 1;
     go('record', rec.id);
   };
 }

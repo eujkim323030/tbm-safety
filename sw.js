@@ -1,5 +1,5 @@
 // 한 번 열면 인터넷 없는 현장에서도 열리도록 캐시. 배포할 때마다 VERSION을 올린다.
-const VERSION = 'tbm-v19';
+const VERSION = 'tbm-v20';
 const CORE = ['./', 'index.html', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {

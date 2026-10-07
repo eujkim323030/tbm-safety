@@ -171,6 +171,11 @@
   .grp { background:var(--canvas); border-radius:24px; overflow:hidden; }
   .grp .li { border-radius:0; border-bottom:1px solid var(--line-soft); }
   .grp .li:last-child { border-bottom:0; }
+  .sw { position:relative; border-bottom:1px solid var(--line-soft); }
+  .sw:last-child { border-bottom:0; }
+  .grp .sw .li { border-bottom:0; position:relative; transition:transform .2s ease; touch-action:pan-y; user-select:none; -webkit-user-select:none; }
+  .sw-del { position:absolute; top:0; right:0; bottom:0; width:88px; border:0; background:var(--neg); color:#fff; font-size:16px; font-weight:700; visibility:hidden; }
+  .sw.on .sw-del { visibility:visible; }
   .li .body { flex:1; min-width:0; }
   .li .body b { display:block; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .li .body small { display:block; color:var(--body); font-size:13px; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -678,10 +683,10 @@ function dayGroupsHtml(recs) {
     <div class="day-h"><b>${dayLabel(g.date)}</b>${g.date === today() ? '<span class="tag">오늘</span>' : g.date === yest ? '<span class="tag">어제</span>' : ''}<span class="cnt">${g.recs.length}건</span></div>
     <div class="grp">${g.recs.map(r => {
       const allOk = r.items.every(i => i.checked);
-      return `<a href="#" class="li" data-id="${r.id}">
+      return `<div class="sw"><button class="sw-del" data-delrec="${r.id}">삭제</button><a href="#" class="li" data-id="${r.id}">
         <div class="body"><b>${esc(r.site)}</b><small>${r.time ? esc(r.time) + ' · ' : ''}${esc(r.templateName)}</small>
           <div class="badges"><span class="badge ${allOk ? 'ok' : ''}">점검 ${r.items.filter(i => i.checked).length}/${r.items.length}</span><span class="badge">서명 ${r.signs.length}명</span><span class="badge">사진 ${r.photos.length}</span>${r.closing ? '' : '<span class="badge warn">종료 미팅 전</span>'}</div>
-        </div><span class="chev">${I.chev}</span></a>`;
+        </div><span class="chev">${I.chev}</span></a></div>`;
     }).join('')}</div>`).join('');
 }
 
@@ -710,6 +715,38 @@ function calendarHtml(recs) {
     ${calDay && byDay[calDay] ? dayGroupsHtml(byDay[calDay]) : `<p class="empty" style="text-align:center;padding:16px 0">${calDay ? '이 날은 기록이 없어요.' : monthCount ? '날짜를 누르면 그날 기록이 보입니다.' : '이 달에는 기록이 없어요.'}</p>`}`;
 }
 
+// 기록 줄을 왼쪽으로 밀면 삭제 버튼이 드러남. 짧게 누르면 기록 열기
+function bindSwipe(root) {
+  const OPEN = -88;
+  let opened = null;
+  const close = li => { li.style.transform = ''; if (opened === li) opened = null; setTimeout(() => { if (opened !== li) li.parentNode.classList.remove('on'); }, 200); };
+  root.querySelectorAll('.sw .li').forEach(li => {
+    let x0 = null, y0 = 0, dx = 0, base = 0, drag = false;
+    li.onpointerdown = e => { x0 = e.clientX; y0 = e.clientY; dx = 0; drag = false; base = li === opened ? OPEN : 0; };
+    li.onpointermove = e => {
+      if (x0 === null) return;
+      const mx = e.clientX - x0, my = e.clientY - y0;
+      if (!drag && Math.abs(mx) > 10 && Math.abs(mx) > Math.abs(my)) {
+        drag = true; li.setPointerCapture(e.pointerId); li.style.transition = 'none'; li.parentNode.classList.add('on');
+        if (opened && opened !== li) close(opened);
+      }
+      if (drag) { dx = Math.min(0, Math.max(OPEN - 24, base + mx)); li.style.transform = `translateX(${dx}px)`; }
+    };
+    li.onpointerup = li.onpointercancel = () => {
+      if (x0 === null) return;
+      x0 = null; li.style.transition = '';
+      if (!drag) return;
+      if (dx < OPEN / 2) { li.style.transform = `translateX(${OPEN}px)`; opened = li; } else close(li);
+    };
+    li.onclick = e => {
+      e.preventDefault();
+      if (drag) { drag = false; return; }
+      if (opened) { close(opened); return; }
+      go('record', li.dataset.id);
+    };
+  });
+}
+
 async function viewRecords(arg) {
   const recs = (await getAll('records')).sort((a, b) => (b.date + b.savedAt).localeCompare(a.date + a.savedAt));
   const st = await backupState();
@@ -727,7 +764,12 @@ async function viewRecords(arg) {
     $('#list').innerHTML = !recs.length ? `<div class="empty-state"><b>아직 기록이 없어요</b>오늘 조회를 저장하면 여기에 쌓입니다.</div>`
       : recView === 'cal' ? calendarHtml(hit)
       : hit.length ? dayGroupsHtml(hit) : `<div class="empty-state"><b>찾는 기록이 없어요</b>다른 검색어로 찾아보세요.</div>`;
-    $('#list').querySelectorAll('a').forEach(a => a.onclick = e => { e.preventDefault(); go('record', a.dataset.id); });
+    bindSwipe($('#list'));
+    $('#list').querySelectorAll('[data-delrec]').forEach(b => b.onclick = async () => {
+      const r = recs.find(x => x.id === b.dataset.delrec);
+      if (!confirm(`${r.date} ${r.site}\n이 조회 기록을 삭제할까요? 되돌릴 수 없습니다.${DRIVE_URL ? '\n(구글 드라이브에 올라간 백업본은 남아 있습니다)' : ''}`)) return;
+      await del('records', r.id); viewRecords();
+    });
     $('#list').querySelectorAll('[data-day]').forEach(b => b.onclick = () => { calDay = b.dataset.day; draw(); });
     $('#list').querySelectorAll('[data-mon]').forEach(b => b.onclick = () => {
       const [y, m] = calMonth.split('-').map(Number), d = new Date(y, m - 1 + Number(b.dataset.mon), 1);

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#ffffff">
+<meta name="theme-color" content="#f7f8fa">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="안전조회">
 <link rel="manifest" href="manifest.webmanifest">
@@ -26,14 +26,12 @@
   button, input, select, textarea { font:inherit; color:inherit; }
   h1, h2, h3, p { margin:0; }
 
-  /* 상단 바 */
-  header { position:sticky; top:0; z-index:5; height:56px; display:flex; align-items:center; gap:10px; padding:0 16px; background:var(--canvas); border-bottom:1px solid var(--hairline-soft); }
-  .mark { background:var(--ink); color:#fff; font-size:12px; font-weight:700; letter-spacing:.5px; padding:4px 10px; border-radius:9999px; }
-  header .name { font-weight:600; font-size:16px; }
-  header .off { margin-left:auto; font-size:12px; font-weight:600; color:var(--steel); background:var(--surface-soft); padding:4px 10px; border-radius:9999px; display:none; }
-  body.offline header .off { display:inline-block; }
+  /* 고정 상단바 없음. 인터넷이 끊겼을 때만 맨 위에 안내줄 (스크롤하면 같이 올라감) */
+  .offbar { display:none; padding:calc(8px + env(safe-area-inset-top)) 16px 8px; background:var(--surface-soft); color:var(--slate); font-size:13px; font-weight:600; text-align:center; }
+  body.offline .offbar { display:block; }
 
-  main { padding:16px; max-width:640px; margin:0 auto; }
+  main { padding:calc(16px + env(safe-area-inset-top)) 16px 16px; max-width:640px; margin:0 auto; }
+  body.offline main { padding-top:16px; }
   .page-title { font-size:28px; font-weight:600; letter-spacing:-.5px; line-height:1.25; margin:8px 0 4px; }
   .page-sub { color:var(--steel); font-size:14px; margin-bottom:20px; }
 
@@ -119,7 +117,7 @@
   details.more[open] > summary svg { transform:rotate(45deg); }
   details.more > summary .opt { margin-left:auto; font-size:12px; font-weight:600; color:var(--stone); background:var(--surface-soft); padding:2px 8px; border-radius:9999px; }
   details.more[open] > summary { margin-bottom:4px; }
-  .acc { background:var(--canvas); border:1px solid var(--hairline); border-radius:16px; margin-bottom:10px; scroll-margin-top:68px; }
+  .acc { background:var(--canvas); border:1px solid var(--hairline); border-radius:16px; margin-bottom:10px; scroll-margin-top:12px; }
   .acc-h { width:100%; display:flex; align-items:center; gap:12px; padding:16px; border:0; background:none; text-align:left; cursor:pointer; }
   .acc .dot { flex:none; width:32px; height:32px; border-radius:9999px; border:1.5px solid #cfd3da; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:700; color:var(--steel); }
   .acc .dot i { font-style:normal; }
@@ -223,7 +221,7 @@
 
   @media print {
     body { background:#fff; padding:0; font-size:12px; }
-    header, nav, .noprint { display:none !important; }
+    .offbar, nav, .noprint { display:none !important; }
     main { padding:0; max-width:none; }
     .card { border:0; padding:0; border-radius:0; }
     .doc table { break-inside:avoid; }
@@ -235,7 +233,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
 </head>
 <body>
-<header><span class="mark">TBM</span><span class="name">안전조회</span><span class="off">오프라인</span></header>
+<div class="offbar">오프라인 · 인터넷 없이도 작성·저장됩니다</div>
 <main id="app"></main>
 <nav>
   <button data-v="new"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg>오늘 조회</button>

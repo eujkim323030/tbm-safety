@@ -63,8 +63,8 @@
 
   /* 입력 */
   label.f { display:block; font-size:13px; font-weight:600; color:var(--slate); margin:14px 0 6px; }
-  label.f:first-of-type { margin-top:0; }
-  input[type=text], input[type=date], input[type=search], select, textarea { width:100%; min-height:44px; padding:10px 14px; font-size:16px; border:1px solid var(--hairline); border-radius:8px; background:var(--canvas); outline:none; -webkit-appearance:none; appearance:none; }
+  .sec-h + label.f { margin-top:0; }
+  input[type=text], input[type=date], input[type=time], input[type=search], select, textarea { width:100%; min-height:44px; padding:10px 14px; font-size:16px; border:1px solid var(--hairline); border-radius:8px; background:var(--canvas); outline:none; -webkit-appearance:none; appearance:none; }
   select { background:var(--canvas) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%235f5f5f' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 14px center; padding-right:36px; }
   input:focus, select:focus, textarea:focus { border:2px solid var(--blue-deep); padding:9px 13px; }
   textarea { min-height:96px; resize:vertical; }
@@ -115,6 +115,11 @@
   /* 뱃지 */
   .badge { display:inline-block; font-size:12px; font-weight:600; padding:3px 10px; border-radius:9999px; background:var(--surface-soft); color:var(--slate); white-space:nowrap; }
   .badge.ok { background:var(--ok-bg); color:var(--ok); }
+  .badge.warn { background:#fff1ec; color:#c2410c; }
+  .seg { display:flex; gap:8px; }
+  .seg button { flex:1; min-height:44px; border-radius:9999px; border:1px solid var(--hairline); background:var(--canvas); color:var(--steel); font-size:15px; font-weight:600; }
+  .seg button.on { background:var(--ink); border-color:var(--ink); color:#fff; }
+  .hint-text { color:var(--steel); font-size:14px; margin:-8px 0 12px; }
 
   /* 목록 */
   .list { display:flex; flex-direction:column; gap:8px; }
@@ -223,6 +228,7 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const dateLabel = d => { const [y, m, dd] = d.split('-').map(Number); return `${y}년 ${m}월 ${dd}일 (${'일월화수목금토'[new Date(y, m - 1, dd).getDay()]})`; };
+const stamp = iso => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 const $ = s => document.querySelector(s);
 const app = $('#app');
 
@@ -278,6 +284,18 @@ const DEFAULT_TEMPLATES = [
     '사다리 1.2m 이상 작업 시 2인 1조, 최상부 발판에서 작업 금지',
     ...TBM_END] },
 ];
+// 중점 위험요인 입력 시 고를 수 있는 예시 (태양광 시공 주요 사고 유형)
+const FOCUS_RISKS = [
+  '채광창(선라이트) 파손으로 떨어짐',
+  '슬레이트·노후 지붕재 파손으로 떨어짐',
+  '지붕 가장자리에서 떨어짐',
+  '사다리에서 떨어짐',
+  '모듈·공구·자재가 떨어져 아래 사람이 맞음',
+  '결선 작업 중 감전',
+  '모듈·자재 운반 중 넘어짐·허리 부상',
+  '폭염으로 인한 온열질환',
+];
+
 // 2026-10 이전 기본 목록. 손대지 않은 채 남아 있으면 위 기준으로 바꾼다
 const OLD_DEFAULT_ITEMS = {
   '00': '안전모·안전화·안전대 착용 상태 확인|안전대 부착설비(구명줄) 설치 및 체결 위치 확인|지붕 가장자리·채광창(선라이트) 등 추락 위험 부위 확인|사다리·고소작업대 상태 및 고정 확인|모듈 인양·운반 방법 확인 (2인 1조)|공구·자재 낙하 방지 조치, 하부 출입 통제|강풍·우천·폭염 시 작업중지 기준 공유|작업자 건강상태 및 음주 여부 확인',
@@ -319,7 +337,8 @@ const saveDraft = () => put('meta', { ...draft, id: 'draft' });
 
 async function newDraft() {
   const ts = await templates();
-  return { date: today(), site: '', leader: '', templateId: ts[0].id, items: ts[0].items.map(text => ({ text, checked: false })), note: '', photos: [], signs: [] };
+  const now = new Date();
+  return { date: today(), time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`, site: '', work: '', leader: '', riskAssessed: null, focusRisk: '', focusAction: '', opinion: '', templateId: ts[0].id, items: ts[0].items.map(text => ({ text, checked: false })), note: '', photos: [], signs: [] };
 }
 
 function refreshHero() {
@@ -350,10 +369,17 @@ async function viewNew() {
     <div class="card">
       <div class="sec-h"><span class="num">01</span><h2>기본 정보</h2></div>
       <label class="f" for="date">날짜</label><input type="date" id="date" value="${esc(draft.date)}">
-      <label class="f" for="site">현장명</label><input type="text" id="site" list="sites" value="${esc(draft.site)}" placeholder="예: OO읍 OO창고 지붕">
+      <label class="f" for="time">TBM 시각</label><input type="time" id="time" value="${esc(draft.time)}">
+      <label class="f" for="site">현장명 (장소)</label><input type="text" id="site" list="sites" value="${esc(draft.site)}" placeholder="예: OO읍 OO창고 지붕">
       <datalist id="sites">${sites.map(s => `<option value="${esc(s)}">`).join('')}</datalist>
-      <label class="f" for="leader">작성자 (관리감독자)</label><input type="text" id="leader" list="leaders" value="${esc(draft.leader)}" placeholder="이름">
+      <label class="f" for="work">오늘 작업내용</label><input type="text" id="work" value="${esc(draft.work)}" placeholder="예: 창고 지붕 모듈 120장 설치">
+      <label class="f" for="leader">TBM 리더 (관리감독자)</label><input type="text" id="leader" list="leaders" value="${esc(draft.leader)}" placeholder="이름">
       <datalist id="leaders">${leaders.map(s => `<option value="${esc(s)}">`).join('')}</datalist>
+      <label class="f">이 작업의 위험성평가를 했나요?</label>
+      <div class="seg" id="ra">
+        <button data-ra="1" class="${draft.riskAssessed === true ? 'on' : ''}">예</button>
+        <button data-ra="0" class="${draft.riskAssessed === false ? 'on' : ''}">아니오</button>
+      </div>
     </div>
 
     <div class="card">
@@ -374,12 +400,25 @@ async function viewNew() {
     </div>
 
     <div class="card">
-      <div class="sec-h"><span class="num">03</span><h2>특이사항·전달사항</h2></div>
-      <textarea id="note" placeholder="오늘 현장 특이사항, 날씨, 주의할 점 등">${esc(draft.note)}</textarea>
+      <div class="sec-h"><span class="num">03</span><h2>오늘의 중점 위험요인</h2></div>
+      <p class="hint-text">오늘 가장 조심할 위험 1가지와 대책을 정해 다 같이 읽고 확인하세요.</p>
+      <label class="f" for="focusRisk">중점 위험요인</label>
+      <input type="text" id="focusRisk" list="risks" value="${esc(draft.focusRisk)}" placeholder="예: 채광창 파손으로 떨어짐">
+      <datalist id="risks">${FOCUS_RISKS.map(s => `<option value="${esc(s)}">`).join('')}</datalist>
+      <label class="f" for="focusAction">대책</label>
+      <textarea id="focusAction" placeholder="예: 채광창 전부 덮개 설치 후 작업, 덮개 없는 구역 출입 금지, 안전대 걸고 이동">${esc(draft.focusAction)}</textarea>
     </div>
 
     <div class="card">
-      <div class="sec-h"><span class="num">04</span><h2>조회 인증 사진</h2><span class="meta">${draft.photos.length}장</span></div>
+      <div class="sec-h"><span class="num">04</span><h2>전달사항·작업자 의견</h2></div>
+      <label class="f" for="note">전달사항·특이사항</label>
+      <textarea id="note" placeholder="오늘 현장 특이사항, 날씨, 최근 사고·아차사고 사례 등">${esc(draft.note)}</textarea>
+      <label class="f" for="opinion">작업자 의견·건의사항</label>
+      <textarea id="opinion" placeholder="작업자가 말한 위험요소, 불편한 점, 필요한 장비 등 (없으면 '없음')">${esc(draft.opinion)}</textarea>
+    </div>
+
+    <div class="card">
+      <div class="sec-h"><span class="num">05</span><h2>조회 인증 사진</h2><span class="meta">${draft.photos.length}장</span></div>
       <div class="photos">
         ${draft.photos.map((p, i) => `<div class="ph"><img src="${p}" alt=""><button class="icon-btn" data-delphoto="${i}" aria-label="사진 삭제">${I.x}</button></div>`).join('')}
         <label class="add-photo">${I.cam}사진 추가<input type="file" id="photo" accept="image/*" multiple hidden></label>
@@ -387,7 +426,7 @@ async function viewNew() {
     </div>
 
     <div class="card">
-      <div class="sec-h"><span class="num">05</span><h2>참석자 서명</h2><span class="meta">${draft.signs.length}명</span></div>
+      <div class="sec-h"><span class="num">06</span><h2>참석자 서명</h2><span class="meta">${draft.signs.length}명</span></div>
       ${draft.signs.length ? draft.signs.map((s, i) => `
         <div class="sig"><span class="no">${i + 1}</span><span class="n">${esc(s.name)}</span><img src="${s.img}" alt="${esc(s.name)} 서명"><button class="icon-btn" data-delsign="${i}" aria-label="서명 삭제">${I.x}</button></div>`).join('')
         : '<p class="empty">아직 서명한 사람이 없습니다.</p>'}
@@ -398,7 +437,12 @@ async function viewNew() {
     <button class="btn link full" id="reset">처음부터 다시 작성</button>`;
   refreshHero();
 
-  ['date', 'site', 'leader', 'note'].forEach(k => $('#' + k).oninput = e => { draft[k] = e.target.value; saveDraft(); refreshHero(); });
+  ['date', 'time', 'site', 'work', 'leader', 'focusRisk', 'focusAction', 'note', 'opinion'].forEach(k => $('#' + k).oninput = e => { draft[k] = e.target.value; saveDraft(); refreshHero(); });
+  app.querySelectorAll('[data-ra]').forEach(b => b.onclick = () => {
+    draft.riskAssessed = b.dataset.ra === '1';
+    app.querySelectorAll('[data-ra]').forEach(x => x.classList.toggle('on', x === b));
+    saveDraft();
+  });
   $('#tpl').onchange = async e => {
     const t = ts.find(t => t.id === e.target.value);
     if (draft.items.some(i => i.checked) && !confirm('체크한 내용이 지워집니다. 바꿀까요?')) { e.target.value = draft.templateId; return; }
@@ -427,6 +471,8 @@ async function viewNew() {
   $('#reset').onclick = async () => { if (confirm('작성 중인 내용을 모두 지울까요?')) { draft = await newDraft(); saveDraft(); viewNew(); } };
   $('#save').onclick = async () => {
     if (!draft.site.trim()) return alert('현장명을 입력하세요.');
+    if (draft.riskAssessed == null) return alert('위험성평가 실시 여부(예/아니오)를 골라 주세요.');
+    if (!(draft.focusRisk || '').trim() || !(draft.focusAction || '').trim()) return alert('오늘의 중점 위험요인과 대책을 적어 주세요.');
     if (!draft.signs.length) return alert('서명이 한 명도 없습니다.');
     const left = draft.items.filter(i => !i.checked).length;
     if (left && !confirm(`체크하지 않은 항목이 ${left}개 있습니다. 그대로 저장할까요?`)) return;
@@ -488,7 +534,9 @@ function openSignPad(knownNames) {
     if (!name) return alert('이름을 입력하세요.');
     if (!drawn) return alert('서명을 그려 주세요.');
     if (draft.signs.some(s => s.name === name) && !confirm(`${name} 님은 이미 서명했습니다. 추가로 등록할까요?`)) return;
-    draft.signs.push({ name, img: cv.toDataURL('image/png'), time: new Date().toISOString() });
+    const img = cv.toDataURL('image/png');
+    if (img.length < 100) return alert('서명이 저장되지 않았습니다. 창을 닫고 다시 서명해 주세요.');
+    draft.signs.push({ name, img, time: new Date().toISOString() });
     saveDraft();
     $('#modal').innerHTML = '';
     viewNew();
@@ -511,7 +559,7 @@ async function viewRecords() {
       return `<a href="#" class="li" data-id="${r.id}">
         <div class="date"><b>${+d}</b><span>${y.slice(2)}.${m}</span></div>
         <div class="body"><b>${esc(r.site)}</b><small>${esc(r.templateName)}</small>
-          <div class="badges"><span class="badge ${allOk ? 'ok' : ''}">점검 ${r.items.filter(i => i.checked).length}/${r.items.length}</span><span class="badge">서명 ${r.signs.length}명</span><span class="badge">사진 ${r.photos.length}</span></div>
+          <div class="badges"><span class="badge ${allOk ? 'ok' : ''}">점검 ${r.items.filter(i => i.checked).length}/${r.items.length}</span><span class="badge">서명 ${r.signs.length}명</span><span class="badge">사진 ${r.photos.length}</span>${r.closing ? '' : '<span class="badge warn">종료 미팅 전</span>'}</div>
         </div><span class="chev">${I.chev}</span></a>`;
     }).join('')
       : `<div class="empty-state"><b>${recs.length ? '찾는 기록이 없어요' : '아직 기록이 없어요'}</b>${recs.length ? '다른 검색어로 찾아보세요.' : '오늘 조회를 저장하면 여기에 쌓입니다.'}</div>`;
@@ -528,27 +576,51 @@ async function viewRecord(id) {
     <div class="card doc">
       <h2>TBM (작업 전 안전점검회의) 일지</h2>
       <table>
-        <tr><th>일자</th><td>${esc(dateLabel(r.date))}</td></tr>
-        <tr><th>현장명</th><td>${esc(r.site)}</td></tr>
-        <tr><th>작업 유형</th><td>${esc(r.templateName)}</td></tr>
-        <tr><th>작성자</th><td>${esc(r.leader)}</td></tr>
+        <tr><th>TBM 일시</th><td>${esc(dateLabel(r.date))}${r.time ? ' ' + esc(r.time) : ''}</td></tr>
+        <tr><th>현장명 (장소)</th><td>${esc(r.site)}</td></tr>
+        <tr><th>작업명</th><td>${esc(r.templateName)}</td></tr>
+        ${r.work ? `<tr><th>작업내용</th><td>${esc(r.work)}</td></tr>` : ''}
+        ${r.riskAssessed != null ? `<tr><th>위험성평가 실시</th><td>${r.riskAssessed ? '예' : '아니오'}</td></tr>` : ''}
+        <tr><th>TBM 리더</th><td>${esc(r.leader)}</td></tr>
       </table>
-      <table>
+      <table class="rows">
         <tr><th>번호</th><th>위험요인 점검 항목</th><th>확인</th></tr>
         ${r.items.map((it, i) => `<tr><td class="c">${i + 1}</td><td>${esc(it.text)}</td><td class="c ${it.checked ? 'chk' : 'nochk'}">${it.checked ? '✔' : '✘'}</td></tr>`).join('')}
       </table>
-      ${r.note ? `<table><tr><th>특이사항·전달사항</th></tr><tr><td style="white-space:pre-wrap">${esc(r.note)}</td></tr></table>` : ''}
-      <table>
+      ${r.focusRisk ? `<table>
+        <tr><th>중점 위험요인</th><td>${esc(r.focusRisk)}</td></tr>
+        <tr><th>대책</th><td style="white-space:pre-wrap">${esc(r.focusAction)}</td></tr>
+      </table>` : ''}
+      ${r.note ? `<table><tr><th>전달사항·특이사항</th></tr><tr><td style="white-space:pre-wrap">${esc(r.note)}</td></tr></table>` : ''}
+      ${r.opinion ? `<table><tr><th>작업자 의견·건의사항</th></tr><tr><td style="white-space:pre-wrap">${esc(r.opinion)}</td></tr></table>` : ''}
+      <table class="rows">
         <tr><th>번호</th><th>성명</th><th>서명</th></tr>
         ${r.signs.map((s, i) => `<tr><td class="c">${i + 1}</td><td>${esc(s.name)}</td><td><img class="sigimg" src="${s.img}" alt=""></td></tr>`).join('')}
       </table>
+      <table>
+        <tr><th>작업 후 종료 미팅 (중점 대책 실효성)</th></tr>
+        <tr><td style="white-space:pre-wrap;height:56px">${r.closing ? `${esc(r.closing.text)}
+<span style="color:var(--steel);font-size:12px">작성 ${esc(stamp(r.closing.at))}</span>` : ''}</td></tr>
+      </table>
       ${r.photos.length ? `<p class="cap">조회 인증 사진</p><div class="photos">${r.photos.map(p => `<div class="ph"><img src="${p}" alt=""></div>`).join('')}</div>` : ''}
+    </div>
+    <div class="card noprint">
+      <div class="sec-h"><h2>작업 후 종료 미팅</h2>${r.closing ? '<span class="badge ok">작성됨</span>' : '<span class="badge warn">작성 전</span>'}</div>
+      <p class="hint-text">작업이 끝나면 중점 대책이 잘 지켜졌는지, 아차사고나 개선할 점이 있었는지 적으세요. 아침 조회 내용과 서명은 바뀌지 않습니다.</p>
+      <textarea id="closing" placeholder="예: 채광창 덮개 유지됨, 오후 강풍으로 15시 작업 중지, 내일 안전방망 추가 필요">${esc(r.closing ? r.closing.text : '')}</textarea>
+      <button class="btn full" id="saveClosing" style="margin-top:12px">${r.closing ? '종료 미팅 수정 저장' : '종료 미팅 저장'}</button>
     </div>
     <div class="actions noprint" id="acts">
       <button class="btn danger" id="delrec">삭제</button>
       <button class="btn" id="mkpdf" style="flex:2">PDF 만들기</button>
     </div>`;
   $('#back').onclick = () => go('records');
+  $('#saveClosing').onclick = async () => {
+    const text = $('#closing').value.trim();
+    if (!text) return alert('종료 미팅 내용을 적어 주세요.');
+    r.closing = { text, at: new Date().toISOString() };
+    await put('records', r); viewRecord(id);
+  };
   $('#mkpdf').onclick = async () => {
     const b = $('#mkpdf');
     b.disabled = true; b.textContent = 'PDF 만드는 중…';
@@ -582,9 +654,9 @@ async function makePdf(r) {
   document.body.appendChild(wrap);
   try {
     await Promise.all([...wrap.querySelectorAll('img')].map(i => i.complete || new Promise(ok => i.onload = i.onerror = ok)));
-    // 표 행·사진 중간에서 페이지가 잘리지 않도록 끊을 수 있는 위치를 모은다
+    // 표 행·사진 중간에서 페이지가 잘리지 않도록 끊을 수 있는 위치를 모은다 (긴 표만 행 단위, 작은 표는 통째로)
     const top = wrap.getBoundingClientRect().top, total = wrap.scrollHeight;
-    const cuts = [...wrap.querySelectorAll('h2, tr, table, .ph')].map(e => Math.ceil(e.getBoundingClientRect().bottom - top)).concat(total).sort((a, b) => a - b);
+    const cuts = [...wrap.querySelectorAll('h2, table, table.rows tr, .ph')].map(e => Math.ceil(e.getBoundingClientRect().bottom - top)).concat(total).sort((a, b) => a - b);
     const S = 2, canvas = await html2canvas(wrap, { scale: S, backgroundColor: '#ffffff' });
     const pdf = new jspdf.jsPDF({ unit: 'pt', format: 'a4' });
     const k = pdf.internal.pageSize.getWidth() / W, H = PAGE - 2 * M;

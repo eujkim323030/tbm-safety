@@ -125,7 +125,6 @@
   details.more[open] > summary svg { transform:rotate(45deg); }
   details.more > summary .opt { margin-left:auto; font-size:12px; font-weight:600; color:var(--stone); background:var(--surface-soft); padding:2px 8px; border-radius:9999px; }
   details.more[open] > summary { margin-bottom:4px; }
-  .card details.more { margin-top:14px; padding-top:8px; border-top:1px solid var(--hairline-soft); }
   .hint-text { color:var(--steel); font-size:14px; margin:-8px 0 12px; }
 
   /* 목록 */
@@ -411,8 +410,11 @@ async function viewNew() {
 
     <div class="card">
       <div class="sec-h"><span class="num">01</span><h2>기본 정보</h2></div>
+      <label class="f" for="date">날짜</label><input type="date" id="date" value="${esc(draft.date)}">
+      <label class="f" for="time">TBM 시각</label><input type="time" id="time" value="${esc(draft.time)}">
       <label class="f" for="site">현장명 (장소)</label><input type="text" id="site" list="sites" value="${esc(draft.site)}" placeholder="예: OO읍 OO창고 지붕">
       <datalist id="sites">${sites.map(s => `<option value="${esc(s)}">`).join('')}</datalist>
+      <label class="f" for="work">오늘 작업내용</label><input type="text" id="work" value="${esc(draft.work)}" placeholder="예: 창고 지붕 모듈 120장 설치">
       <label class="f" for="leader">TBM 리더 (관리감독자)</label><input type="text" id="leader" list="leaders" value="${esc(draft.leader)}" placeholder="이름">
       <datalist id="leaders">${leaders.map(s => `<option value="${esc(s)}">`).join('')}</datalist>
       <label class="f">이 작업의 위험성평가를 했나요?</label>
@@ -420,12 +422,6 @@ async function viewNew() {
         <button data-ra="1" class="${draft.riskAssessed === true ? 'on' : ''}">예</button>
         <button data-ra="0" class="${draft.riskAssessed === false ? 'on' : ''}">아니오</button>
       </div>
-      <details class="more" data-more="info" ${moreOpen.info ? 'open' : ''}>
-        <summary>${I.plus}날짜·시각 바꾸기, 작업내용 적기 <span class="opt">선택</span></summary>
-        <label class="f" for="date">날짜</label><input type="date" id="date" value="${esc(draft.date)}">
-        <label class="f" for="time">TBM 시각</label><input type="time" id="time" value="${esc(draft.time)}">
-        <label class="f" for="work">오늘 작업내용</label><input type="text" id="work" value="${esc(draft.work)}" placeholder="예: 창고 지붕 모듈 120장 설치">
-      </details>
     </div>
 
     <div class="card">

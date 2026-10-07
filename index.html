@@ -138,13 +138,29 @@
   .li .body small { display:block; color:var(--steel); font-size:13px; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .li .badges { display:flex; gap:4px; margin-top:8px; flex-wrap:wrap; }
   .li .chev { flex:none; color:var(--muted); }
-  details.bk { padding:12px 16px; }
-  details.bk summary { display:flex; align-items:center; gap:10px; list-style:none; cursor:pointer; min-height:36px; }
-  details.bk summary::-webkit-details-marker { display:none; }
-  details.bk .bk-t { flex:1; min-width:0; display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
-  details.bk .bk-t small { color:var(--steel); font-size:13px; }
-  details.bk .chev { color:var(--muted); transition:transform .15s; display:flex; }
-  details.bk[open] .chev { transform:rotate(90deg); }
+  .title-row { display:flex; align-items:center; gap:8px; margin:8px 0 16px; }
+  .title-row .page-title { margin:0; flex:1; }
+  .bk-chip { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--hairline); background:var(--canvas); color:var(--steel); font-size:12px; font-weight:600; padding:5px 10px; border-radius:9999px; white-space:nowrap; }
+  .bk-chip svg { width:14px; height:14px; }
+  .bk-chip.ok { background:var(--ok-bg); border-color:transparent; color:var(--ok); }
+  .bk-chip.warn { background:#fff1ec; border-color:transparent; color:#c2410c; }
+  .cal { padding:12px; }
+  .cal-h { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .cal-h .grow { text-align:center; }
+  .cal-h b { font-size:19px; font-weight:600; }
+  .cal-h small { margin-left:6px; color:var(--steel); font-size:14px; }
+  .cal-w, .cal-g { display:grid; grid-template-columns:repeat(7,1fr); text-align:center; }
+  .cal-w span { font-size:13px; font-weight:600; color:var(--steel); padding:4px 0; }
+  .cal-w span:first-child { color:var(--err); }
+  .cal-g { gap:2px; }
+  .cd { border:0; background:none; height:54px; border-radius:12px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; padding:0; color:var(--steel); }
+  .cd b { font-size:16px; font-weight:500; line-height:1.2; }
+  .cd small { font-size:11px; font-weight:700; color:var(--ok); }
+  .cd.has { background:var(--ok-bg); color:var(--ink); }
+  .cd.has b { font-weight:700; }
+  .cd.today b { text-decoration:underline; text-underline-offset:3px; }
+  .cd.sel { background:var(--ink); color:#fff; }
+  .cd.sel small { color:#fff; }
   input.search { margin-bottom:16px; padding-left:40px !important; background:var(--canvas) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='none' stroke='%238e8e93' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='8' cy='8' r='6'/%3E%3Cpath d='M12.5 12.5L16 16'/%3E%3C/svg%3E") no-repeat 14px center; }
   input.search:focus { padding-left:39px !important; }
   .empty-state { text-align:center; padding:48px 16px; color:var(--steel); }
@@ -251,6 +267,7 @@ const I = {
   back: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3L5 9l6 6"/></svg>',
   chev: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>',
   cam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+  cloud: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18z"/></svg>',
   pen: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
 };
 
@@ -454,7 +471,7 @@ async function viewNew() {
     <button class="btn full lg" id="save" style="margin-top:8px">조회 저장</button>
     <button class="btn link full" id="reset">처음부터 다시 작성</button>`;
   refreshHero();
-  if (needBackup) $('#goBackup').onclick = () => go('records');
+  if (needBackup) $('#goBackup').onclick = () => go('records', 'backup');
 
   ['date', 'time', 'site', 'work', 'leader', 'focusRisk', 'focusAction', 'note', 'opinion'].forEach(k => $('#' + k).oninput = e => { draft[k] = e.target.value; saveDraft(); refreshHero(); });
   app.querySelectorAll('[data-ra]').forEach(b => b.onclick = () => {
@@ -564,36 +581,83 @@ function openSignPad(knownNames) {
 }
 
 // ---------- 지난 기록 ----------
-async function viewRecords() {
-  const recs = (await getAll('records')).sort((a, b) => (b.date + b.savedAt).localeCompare(a.date + a.savedAt));
-  app.innerHTML = `
-    <h1 class="page-title">지난 기록</h1>
-    <p class="page-sub">저장된 조회 ${recs.length}건</p>
-    ${backupCard(await backupState())}
-    <input type="search" class="search" id="q" placeholder="현장명·날짜·이름으로 찾기">
-    <div class="list" id="list"></div>`;
-  const draw = q => {
-    const hit = recs.filter(r => !q || [r.date, r.site, r.leader, ...r.signs.map(s => s.name)].join(' ').includes(q));
-    // 같은 날짜끼리 묶고, 날짜는 '10월 7일 수요일'처럼 크게 (올해가 아니면 연도도)
-    const days = [];
-    for (const r of hit) (days.length && days[days.length - 1].date === r.date ? days[days.length - 1].recs : (days.push({ date: r.date, recs: [] }), days[days.length - 1].recs)).push(r);
-    const yest = new Date(Date.now() - new Date().getTimezoneOffset() * 60000 - 864e5).toISOString().slice(0, 10);
-    $('#list').innerHTML = hit.length ? days.map(g => `
-      <div class="day-h"><b>${dayLabel(g.date)}</b>${g.date === today() ? '<span class="tag">오늘</span>' : g.date === yest ? '<span class="tag">어제</span>' : ''}<span class="cnt">${g.recs.length}건</span></div>
-      <div class="grp">${g.recs.map(r => {
+// 목록·달력 보기 상태 (기록을 열었다 돌아와도 유지)
+let recView = 'list', calMonth = today().slice(0, 7), calDay = null;
+
+function dayGroupsHtml(recs) {
+  const days = [];
+  for (const r of recs) (days.length && days[days.length - 1].date === r.date ? days[days.length - 1].recs : (days.push({ date: r.date, recs: [] }), days[days.length - 1].recs)).push(r);
+  const yest = new Date(Date.now() - new Date().getTimezoneOffset() * 60000 - 864e5).toISOString().slice(0, 10);
+  return days.map(g => `
+    <div class="day-h"><b>${dayLabel(g.date)}</b>${g.date === today() ? '<span class="tag">오늘</span>' : g.date === yest ? '<span class="tag">어제</span>' : ''}<span class="cnt">${g.recs.length}건</span></div>
+    <div class="grp">${g.recs.map(r => {
       const allOk = r.items.every(i => i.checked);
       return `<a href="#" class="li" data-id="${r.id}">
         <div class="body"><b>${esc(r.site)}</b><small>${r.time ? esc(r.time) + ' · ' : ''}${esc(r.templateName)}</small>
           <div class="badges"><span class="badge ${allOk ? 'ok' : ''}">점검 ${r.items.filter(i => i.checked).length}/${r.items.length}</span><span class="badge">서명 ${r.signs.length}명</span><span class="badge">사진 ${r.photos.length}</span>${r.closing ? '' : '<span class="badge warn">종료 미팅 전</span>'}</div>
         </div><span class="chev">${I.chev}</span></a>`;
-    }).join('')}</div>`).join('')
-      : `<div class="empty-state"><b>${recs.length ? '찾는 기록이 없어요' : '아직 기록이 없어요'}</b>${recs.length ? '다른 검색어로 찾아보세요.' : '오늘 조회를 저장하면 여기에 쌓입니다.'}</div>`;
+    }).join('')}</div>`).join('');
+}
+
+function calendarHtml(recs) {
+  const byDay = {};
+  for (const r of recs) (byDay[r.date] = byDay[r.date] || []).push(r);
+  const [y, m] = calMonth.split('-').map(Number);
+  // 고른 날이 없으면 이 달의 오늘(기록 있으면) 또는 가장 최근 기록일
+  if (!calDay || !calDay.startsWith(calMonth)) calDay = byDay[today()] && today().startsWith(calMonth) ? today() : Object.keys(byDay).filter(d => d.startsWith(calMonth)).sort().pop() || null;
+  const cells = [];
+  for (let i = new Date(y, m - 1, 1).getDay(); i > 0; i--) cells.push('<span></span>');
+  for (let d = 1, n = new Date(y, m, 0).getDate(); d <= n; d++) {
+    const ds = `${calMonth}-${String(d).padStart(2, '0')}`, c = (byDay[ds] || []).length;
+    cells.push(`<button class="cd ${c ? 'has' : ''} ${ds === today() ? 'today' : ''} ${ds === calDay ? 'sel' : ''}" data-day="${ds}"><b>${d}</b>${c ? `<small>${c}건</small>` : ''}</button>`);
+  }
+  const monthCount = recs.filter(r => r.date.startsWith(calMonth)).length;
+  return `<div class="card cal">
+      <div class="cal-h">
+        <button class="icon-btn" data-mon="-1" aria-label="이전 달">${I.back}</button>
+        <div class="grow"><b>${y}년 ${m}월</b><small>${monthCount}건</small></div>
+        <button class="icon-btn" data-mon="1" aria-label="다음 달">${I.chev}</button>
+      </div>
+      <div class="cal-w">${[...'일월화수목금토'].map(w => `<span>${w}</span>`).join('')}</div>
+      <div class="cal-g">${cells.join('')}</div>
+    </div>
+    ${calDay && byDay[calDay] ? dayGroupsHtml(byDay[calDay]) : `<p class="empty" style="text-align:center;padding:16px 0">${calDay ? '이 날은 기록이 없어요.' : monthCount ? '날짜를 누르면 그날 기록이 보입니다.' : '이 달에는 기록이 없어요.'}</p>`}`;
+}
+
+async function viewRecords(arg) {
+  const recs = (await getAll('records')).sort((a, b) => (b.date + b.savedAt).localeCompare(a.date + a.savedAt));
+  const st = await backupState();
+  app.innerHTML = `
+    <div class="title-row"><h1 class="page-title">지난 기록</h1>${backupChip(st)}</div>
+    <input type="search" class="search" id="q" placeholder="현장명·날짜·이름으로 찾기">
+    <div class="seg" style="margin-bottom:16px">
+      <button data-view="list" class="${recView === 'list' ? 'on' : ''}">목록</button>
+      <button data-view="cal" class="${recView === 'cal' ? 'on' : ''}">달력</button>
+    </div>
+    <div class="list" id="list"></div>`;
+  const draw = () => {
+    const q = $('#q').value.trim();
+    const hit = recs.filter(r => !q || [r.date, r.site, r.leader, ...r.signs.map(s => s.name)].join(' ').includes(q));
+    $('#list').innerHTML = !recs.length ? `<div class="empty-state"><b>아직 기록이 없어요</b>오늘 조회를 저장하면 여기에 쌓입니다.</div>`
+      : recView === 'cal' ? calendarHtml(hit)
+      : hit.length ? dayGroupsHtml(hit) : `<div class="empty-state"><b>찾는 기록이 없어요</b>다른 검색어로 찾아보세요.</div>`;
     $('#list').querySelectorAll('a').forEach(a => a.onclick = e => { e.preventDefault(); go('record', a.dataset.id); });
+    $('#list').querySelectorAll('[data-day]').forEach(b => b.onclick = () => { calDay = b.dataset.day; draw(); });
+    $('#list').querySelectorAll('[data-mon]').forEach(b => b.onclick = () => {
+      const [y, m] = calMonth.split('-').map(Number), d = new Date(y, m - 1 + Number(b.dataset.mon), 1);
+      calMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; calDay = null; draw();
+    });
   };
-  bindBackupCard();
+  app.querySelectorAll('[data-view]').forEach(b => b.onclick = () => {
+    recView = b.dataset.view;
+    app.querySelectorAll('[data-view]').forEach(x => x.classList.toggle('on', x === b));
+    draw();
+  });
+  $('#bkchip').onclick = () => openBackupSheet(st);
   syncDrive();
-  $('#q').oninput = e => draw(e.target.value.trim());
-  draw('');
+  $('#q').oninput = draw;
+  draw();
+  if (arg === 'backup') openBackupSheet(st);
 }
 
 async function viewRecord(id) {
@@ -740,33 +804,40 @@ async function restoreBackup(files) {
   for (const t of data.templates) await put('templates', t);
   await put('meta', { id: 'tpl-v2' }); // 백업에 담긴 체크리스트를 다시 바꾸지 않도록
   alert(`불러오기 완료: 조회 기록 ${data.records.length}건`);
+  $('#modal').innerHTML = '';
   viewRecords();
 }
 
-function backupCard(st) {
+// 제목 오른쪽의 작은 백업 상태 배지. 누르면 바텀시트로 설명·버튼
+function backupChip(st) {
+  const cls = st.pending ? 'warn' : st.count ? 'ok' : '';
+  const txt = st.pending ? `${st.drive ? '업로드 대기' : '백업 필요'} ${st.pending}건`
+    : st.last ? `백업됨 ${stamp(st.last)}` : st.drive ? '자동 백업 켜짐' : '백업 안 함';
+  return `<button class="bk-chip ${cls}" id="bkchip">${I.cloud}${txt}</button>`;
+}
+
+function openBackupSheet(st) {
   const lastTxt = st.last ? `마지막 ${st.drive ? '업로드' : '백업'} ${stamp(st.last)}` : `아직 ${st.drive ? '업로드' : '백업'}한 적 없음`;
   const hint = st.drive
     ? '구글 드라이브 자동 백업이 켜져 있습니다. 조회를 저장하거나 종료 미팅을 쓰면 자동으로 올라갑니다. 인터넷이 없으면 연결될 때 올라갑니다.'
-    : "기록은 이 폰 안에만 저장됩니다. 백업 파일을 카톡 '나와의 채팅'이나 구글 드라이브에 보관하세요. 폰을 바꾸면 새 폰에서 '백업 불러오기'로 복원됩니다.";
-  // 평소엔 한 줄 상태만 보이고, 눌러야 설명과 버튼이 펼쳐진다 (수동 백업이 밀렸을 때만 펼친 채로)
-  return `<details class="card bk" id="backup" ${!st.drive && st.pending ? 'open' : ''}>
-    <summary>
-      <span class="bk-t"><b>${st.drive ? '자동 백업' : '기록 백업'}</b><small>${lastTxt}</small></span>
-      ${st.pending ? `<span class="badge warn">${st.drive ? '업로드 대기' : '백업 안 된 기록'} ${st.pending}건</span>` : st.count ? '<span class="badge ok">백업 완료</span>' : ''}
-      <span class="chev">${I.chev}</span>
-    </summary>
-    <p class="hint-text" style="margin:12px 0">${hint}</p>
-    <div class="actions" id="bkacts" style="margin:0">
+    : "기록은 이 폰 안에만 저장됩니다. 백업 파일을 카톡 '나와의 채팅'이나 구글 드라이브에 보관하세요.";
+  $('#modal').innerHTML = `<div class="modal"><div class="sheet">
+    <div class="grab"></div>
+    <h2>${st.drive ? '자동 백업' : '기록 백업'}</h2>
+    <p class="page-sub">${hint}<br><b style="color:var(--ink)">${lastTxt}</b>${st.pending ? ` · <b style="color:#c2410c">${st.drive ? '업로드 대기' : '백업 안 된 기록'} ${st.pending}건</b>` : ''}</p>
+    <p class="hint-text" style="margin:0 0 12px">폰을 바꾸면 새 폰에서 '백업 불러오기'로 백업 파일을 고르면 복원됩니다.</p>
+    <div class="actions" id="bkacts" style="margin:0 0 8px">
       <button class="btn" id="mkbackup">백업 파일 만들기</button>
       <label class="btn ter">백업 불러오기<input type="file" id="restore" accept=".txt,.json,text/plain,application/json" multiple hidden></label>
     </div>
-  </details>`;
-}
-
-function bindBackupCard() {
+    <button class="btn link full" id="bkclose">닫기</button>
+  </div></div>`;
+  const close = () => $('#modal').innerHTML = '';
+  $('#bkclose').onclick = close;
+  $('.modal').onclick = e => { if (e.target.classList.contains('modal')) close(); };
   $('#mkbackup').onclick = async () => {
     const file = await makeBackup();
-    offerFile($('#bkacts'), file, async () => { await put('meta', { id: 'lastBackup', at: new Date().toISOString() }); viewRecords(); });
+    offerFile($('#bkacts'), file, async () => { await put('meta', { id: 'lastBackup', at: new Date().toISOString() }); close(); viewRecords(); });
   };
   $('#restore').onchange = e => { if (e.target.files.length) restoreBackup([...e.target.files]); };
 }

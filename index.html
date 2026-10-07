@@ -71,7 +71,7 @@
   input::placeholder, textarea::placeholder { color:var(--muted); }
 
   /* 버튼 (모두 알약형) */
-  .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:44px; padding:11px 24px; border-radius:9999px; border:1px solid var(--ink); background:var(--ink); color:#fff; font-size:15px; font-weight:600; line-height:1.4; cursor:pointer; text-decoration:none; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:44px; padding:11px 24px; border-radius:9999px; border:1px solid var(--ink); background:var(--ink); color:#fff; font-size:15px; font-weight:600; line-height:1.4; cursor:pointer; text-decoration:none; white-space:nowrap; }
   .btn:active { background:var(--charcoal); }
   .btn.ter { background:var(--canvas); color:var(--ink); border-color:var(--hairline); }
   .btn.ter:active { background:var(--surface); }
@@ -133,8 +133,8 @@
   .li .body small { display:block; color:var(--steel); font-size:13px; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .li .badges { display:flex; gap:4px; margin-top:8px; flex-wrap:wrap; }
   .li .chev { flex:none; color:var(--muted); }
-  .search { margin-bottom:16px; padding-left:40px !important; background:var(--canvas) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='none' stroke='%238e8e93' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='8' cy='8' r='6'/%3E%3Cpath d='M12.5 12.5L16 16'/%3E%3C/svg%3E") no-repeat 14px center; }
-  .search:focus { padding-left:39px !important; }
+  input.search { margin-bottom:16px; padding-left:40px !important; background:var(--canvas) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='none' stroke='%238e8e93' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='8' cy='8' r='6'/%3E%3Cpath d='M12.5 12.5L16 16'/%3E%3C/svg%3E") no-repeat 14px center; }
+  input.search:focus { padding-left:39px !important; }
   .empty-state { text-align:center; padding:48px 16px; color:var(--steel); }
   .empty-state b { display:block; color:var(--ink); font-size:18px; font-weight:600; margin-bottom:4px; }
 
@@ -354,7 +354,12 @@ async function viewNew() {
   const recs = await getAll('records');
   const sites = [...new Set(recs.map(r => r.site))];
   const leaders = [...new Set(recs.map(r => r.leader).filter(Boolean))];
+  const bk = await backupState();
+  const needBackup = bk.pending && (!bk.last || Date.now() - new Date(bk.last) > 7 * 864e5);
   app.innerHTML = `
+    ${needBackup ? `<div class="card row" style="border-color:#ffd2c2;background:#fff7f4">
+      <div class="grow"><b>백업 안 된 기록 ${bk.pending}건</b><p class="muted" style="font-size:13px;color:var(--steel)">${bk.last ? `마지막 백업 ${stamp(bk.last)}` : '아직 백업한 적이 없어요'}</p></div>
+      <button class="btn" id="goBackup">백업하기</button></div>` : ''}
     <section class="hero">
       <div class="hero-top"><span class="badge-w">TODAY</span><span id="h-date"></span></div>
       <h1>오늘의 안전조회</h1>
@@ -436,6 +441,7 @@ async function viewNew() {
     <button class="btn full lg" id="save" style="margin-top:8px">조회 저장</button>
     <button class="btn link full" id="reset">처음부터 다시 작성</button>`;
   refreshHero();
+  if (needBackup) $('#goBackup').onclick = () => go('records');
 
   ['date', 'time', 'site', 'work', 'leader', 'focusRisk', 'focusAction', 'note', 'opinion'].forEach(k => $('#' + k).oninput = e => { draft[k] = e.target.value; saveDraft(); refreshHero(); });
   app.querySelectorAll('[data-ra]').forEach(b => b.onclick = () => {
@@ -549,6 +555,7 @@ async function viewRecords() {
   app.innerHTML = `
     <h1 class="page-title">지난 기록</h1>
     <p class="page-sub">저장된 조회 ${recs.length}건</p>
+    ${backupCard(await backupState())}
     <input type="search" class="search" id="q" placeholder="현장명·날짜·이름으로 찾기">
     <div class="list" id="list"></div>`;
   const draw = q => {
@@ -565,6 +572,7 @@ async function viewRecords() {
       : `<div class="empty-state"><b>${recs.length ? '찾는 기록이 없어요' : '아직 기록이 없어요'}</b>${recs.length ? '다른 검색어로 찾아보세요.' : '오늘 조회를 저장하면 여기에 쌓입니다.'}</div>`;
     $('#list').querySelectorAll('a').forEach(a => a.onclick = e => { e.preventDefault(); go('record', a.dataset.id); });
   };
+  bindBackupCard();
   $('#q').oninput = e => draw(e.target.value.trim());
   draw('');
 }
@@ -627,22 +635,76 @@ async function viewRecord(id) {
     let file;
     try { file = await makePdf(r); }
     catch (e) { alert('PDF를 만들지 못했습니다. 인터넷에 연결된 상태로 앱을 한 번 다시 열어 주세요.'); b.disabled = false; b.textContent = 'PDF 만들기'; return; }
-    // 공유는 사용자가 직접 누른 직후에만 허용되므로, 만든 뒤 버튼을 한 번 더 누르게 한다
-    const canShare = navigator.canShare && navigator.canShare({ files: [file] });
-    $('#acts').innerHTML = `${canShare ? '<button class="btn" id="sharepdf">공유하기 (카톡·파일 저장)</button>' : ''}
-      <button class="btn ${canShare ? 'ter' : ''}" id="savepdf">기기에 저장</button>`;
-    if (canShare) $('#sharepdf').onclick = () => navigator.share({ files: [file], title: file.name }).catch(() => {});
-    $('#savepdf').onclick = () => {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(file); a.download = file.name;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-    };
+    offerFile($('#acts'), file);
   };
   $('#delrec').onclick = async () => {
     if (!confirm('이 조회 기록을 삭제할까요? 되돌릴 수 없습니다.')) return;
     await del('records', id); go('records');
   };
+}
+
+// 공유는 사용자가 직접 누른 직후에만 허용되므로, 파일을 만든 뒤 버튼을 한 번 더 누르게 한다
+function offerFile(host, file, onDone = () => {}) {
+  const canShare = navigator.canShare && navigator.canShare({ files: [file] });
+  host.innerHTML = `${canShare ? '<button class="btn" data-share>공유하기 (카톡·드라이브)</button>' : ''}
+    <button class="btn ${canShare ? 'ter' : ''}" data-save>기기에 저장</button>`;
+  if (canShare) host.querySelector('[data-share]').onclick = () => navigator.share({ files: [file], title: file.name }).then(onDone, () => {});
+  host.querySelector('[data-save]').onclick = () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(file); a.download = file.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    onDone();
+  };
+}
+
+// ---------- 백업 (기록이 폰 안에만 있어서, 파일로 내보내 카톡·드라이브에 보관하고 새 폰에서 불러온다) ----------
+async function backupState() {
+  const recs = await getAll('records'), last = await get('meta', 'lastBackup');
+  const since = last ? last.at : '';
+  const pending = recs.filter(r => r.savedAt > since || (r.closing && r.closing.at > since)).length;
+  return { count: recs.length, last: since, pending };
+}
+
+async function makeBackup() {
+  const data = { app: 'tbm-safety', version: 1, exportedAt: new Date().toISOString(), records: await getAll('records'), templates: await getAll('templates') };
+  // 휴대폰 공유창은 .json을 받지 않는 경우가 있어 텍스트 파일로 만든다 (불러올 때는 둘 다 가능)
+  return new File([JSON.stringify(data)], `TBM_백업_${today()}.txt`, { type: 'text/plain' });
+}
+
+async function restoreBackup(file) {
+  let data;
+  try { data = JSON.parse(await file.text()); } catch (e) { data = null; }
+  if (!data || data.app !== 'tbm-safety' || !Array.isArray(data.records)) return alert('안전조회 백업 파일이 아닙니다.');
+  const have = new Set((await getAll('records')).map(r => r.id));
+  const fresh = data.records.filter(r => !have.has(r.id)).length;
+  if (!confirm(`백업 파일: 조회 기록 ${data.records.length}건 (새 기록 ${fresh}건), 체크리스트 ${data.templates.length}개
+불러올까요? 같은 기록은 백업 내용으로 덮어씁니다.`)) return;
+  for (const r of data.records) await put('records', r);
+  for (const t of data.templates) await put('templates', t);
+  await put('meta', { id: 'tpl-v2' }); // 백업에 담긴 체크리스트를 다시 바꾸지 않도록
+  alert(`불러오기 완료: 조회 기록 ${data.records.length}건`);
+  viewRecords();
+}
+
+function backupCard(st) {
+  const lastTxt = st.last ? `마지막 백업 ${stamp(st.last)}` : '아직 백업한 적 없음';
+  return `<div class="card" id="backup">
+    <div class="sec-h"><h2>기록 백업</h2>${st.pending ? `<span class="badge warn">백업 안 된 기록 ${st.pending}건</span>` : st.count ? '<span class="badge ok">백업 완료</span>' : ''}</div>
+    <p class="hint-text">기록은 이 폰 안에만 저장됩니다. 백업 파일을 카톡 '나와의 채팅'이나 구글 드라이브에 보관하세요. 폰을 바꾸면 새 폰에서 '백업 불러오기'로 복원됩니다.<br><b style="color:var(--ink)">${lastTxt}</b></p>
+    <div class="actions" id="bkacts" style="margin:0">
+      <button class="btn" id="mkbackup">백업 파일 만들기</button>
+      <label class="btn ter">백업 불러오기<input type="file" id="restore" accept=".txt,.json,text/plain,application/json" hidden></label>
+    </div>
+  </div>`;
+}
+
+function bindBackupCard() {
+  $('#mkbackup').onclick = async () => {
+    const file = await makeBackup();
+    offerFile($('#bkacts'), file, async () => { await put('meta', { id: 'lastBackup', at: new Date().toISOString() }); viewRecords(); });
+  };
+  $('#restore').onchange = e => { if (e.target.files[0]) restoreBackup(e.target.files[0]); };
 }
 
 // 인쇄창(window.print)은 홈 화면 앱·카톡 브라우저에서 안 열려서, 기록 문서를 A4 이미지로 그려 PDF 파일을 직접 만든다

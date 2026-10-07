@@ -664,7 +664,7 @@ function offerFile(host, file, onDone = () => {}) {
 // ---------- 백업 (기록이 폰 안에만 있어서, 파일로 내보내 카톡·드라이브에 보관하고 새 폰에서 불러온다) ----------
 // 구글 드라이브 자동 백업: 관리자 구글 계정의 Apps Script 웹앱 주소 (drive-backup.gs 참고).
 // 이 주소로는 정해진 폴더에 파일을 넣기만 할 수 있고, 드라이브를 읽을 수는 없다. 비워 두면 자동 백업 꺼짐.
-const DRIVE_URL = '';
+const DRIVE_URL = 'https://script.google.com/macros/s/AKfycbx-TQZ0uAt9zEq9W6n2pSV9sphGHMLwtjlNylJokBg5ExdwlKwiCQyw8XBoNp3TtK-n/exec';
 const recVer = r => r.closing ? r.closing.at : r.savedAt; // 종료 미팅이 추가되면 다시 올린다
 
 let syncing = false;

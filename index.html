@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="안전조회">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>TBM 안전조회</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet">
+<style>
+  :root {
+    --ink:#0a0a0a; --charcoal:#222222; --slate:#45515e; --steel:#5f5f5f; --stone:#8e8e93; --muted:#a8aab2;
+    --canvas:#ffffff; --surface:#f7f8fa; --surface-soft:#f2f3f5; --hairline:#e5e7eb; --hairline-soft:#eaecf0;
+    --coral:#ff5530; --blue-deep:#1d4ed8; --ok-bg:#e8ffea; --ok:#1ba673; --err:#d45656;
+    --shadow-modal:rgba(36,36,36,.08) 0 12px 16px -4px;
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; background:var(--surface); color:var(--ink); font:16px/1.5 "DM Sans","Pretendard Variable",Pretendard,-apple-system,"Malgun Gothic",sans-serif; padding-bottom:calc(72px + env(safe-area-inset-bottom)); word-break:keep-all; overflow-wrap:anywhere; }
+  button, input, select, textarea { font:inherit; color:inherit; }
+  h1, h2, h3, p { margin:0; }
+
+  /* 상단 바 */
+  header { position:sticky; top:0; z-index:5; height:56px; display:flex; align-items:center; gap:10px; padding:0 16px; background:var(--canvas); border-bottom:1px solid var(--hairline-soft); }
+  .mark { background:var(--ink); color:#fff; font-size:12px; font-weight:700; letter-spacing:.5px; padding:4px 10px; border-radius:9999px; }
+  header .name { font-weight:600; font-size:16px; }
+  header .off { margin-left:auto; font-size:12px; font-weight:600; color:var(--steel); background:var(--surface-soft); padding:4px 10px; border-radius:9999px; display:none; }
+  body.offline header .off { display:inline-block; }
+
+  main { padding:16px; max-width:640px; margin:0 auto; }
+  .page-title { font-size:28px; font-weight:600; letter-spacing:-.5px; line-height:1.25; margin:8px 0 4px; }
+  .page-sub { color:var(--steel); font-size:14px; margin-bottom:20px; }
+
+  /* 하단 탭 */
+  nav { position:fixed; bottom:0; left:0; right:0; z-index:5; display:flex; background:var(--canvas); border-top:1px solid var(--hairline-soft); padding-bottom:env(safe-area-inset-bottom); }
+  nav button { flex:1; border:0; background:none; height:64px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:12px; font-weight:500; color:var(--stone); }
+  nav button svg { width:24px; height:24px; }
+  nav button.on { color:var(--ink); font-weight:600; }
+
+  /* 오늘 조회 대표 카드 (브랜드 코랄) */
+  .hero { background:var(--coral); color:#fff; border-radius:32px; padding:24px; margin-bottom:16px; }
+  .hero-top { display:flex; justify-content:space-between; align-items:center; font-size:14px; font-weight:500; opacity:.95; }
+  .badge-w { background:#fff; color:var(--coral); font-size:12px; font-weight:700; letter-spacing:.5px; padding:4px 10px; border-radius:9999px; }
+  .hero h1 { font-size:32px; font-weight:600; letter-spacing:-.5px; line-height:1.25; margin-top:20px; }
+  .hero .site { font-size:16px; opacity:.85; margin-top:4px; min-height:24px; }
+  .stats { display:grid; grid-template-columns:repeat(3,1fr); margin-top:24px; border-top:1px solid rgba(255,255,255,.3); padding-top:16px; }
+  .stats div + div { border-left:1px solid rgba(255,255,255,.3); padding-left:16px; }
+  .stats b { display:block; font-size:28px; font-weight:600; letter-spacing:-.5px; line-height:1.2; }
+  .stats span { font-size:13px; opacity:.85; }
+
+  /* 카드 */
+  .card { background:var(--canvas); border:1px solid var(--hairline); border-radius:16px; padding:20px; margin-bottom:12px; }
+  .sec-h { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+  .sec-h .num { font-size:13px; font-weight:600; color:var(--stone); font-variant-numeric:tabular-nums; }
+  .sec-h h2 { font-size:18px; font-weight:600; flex:1; }
+  .sec-h .meta { font-size:13px; font-weight:600; color:var(--steel); }
+
+  /* 입력 */
+  label.f { display:block; font-size:13px; font-weight:600; color:var(--slate); margin:14px 0 6px; }
+  label.f:first-of-type { margin-top:0; }
+  input[type=text], input[type=date], input[type=search], select, textarea { width:100%; min-height:44px; padding:10px 14px; font-size:16px; border:1px solid var(--hairline); border-radius:8px; background:var(--canvas); outline:none; -webkit-appearance:none; appearance:none; }
+  select { background:var(--canvas) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%235f5f5f' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 14px center; padding-right:36px; }
+  input:focus, select:focus, textarea:focus { border:2px solid var(--blue-deep); padding:9px 13px; }
+  textarea { min-height:96px; resize:vertical; }
+  input::placeholder, textarea::placeholder { color:var(--muted); }
+
+  /* 버튼 (모두 알약형) */
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:44px; padding:11px 24px; border-radius:9999px; border:1px solid var(--ink); background:var(--ink); color:#fff; font-size:15px; font-weight:600; line-height:1.4; cursor:pointer; text-decoration:none; }
+  .btn:active { background:var(--charcoal); }
+  .btn.ter { background:var(--canvas); color:var(--ink); border-color:var(--hairline); }
+  .btn.ter:active { background:var(--surface); }
+  .btn.danger { background:var(--canvas); color:var(--err); border-color:var(--hairline); }
+  .btn.full { width:100%; }
+  .btn.lg { min-height:56px; font-size:17px; }
+  .btn.link { background:none; border:0; color:var(--steel); min-height:44px; padding:8px 0; }
+  .icon-btn { flex:none; width:36px; height:36px; border-radius:9999px; border:1px solid var(--hairline); background:var(--canvas); color:var(--stone); display:inline-flex; align-items:center; justify-content:center; padding:0; cursor:pointer; }
+  .icon-btn svg { width:14px; height:14px; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .row > .grow { flex:1; min-width:0; }
+
+  /* 체크리스트 */
+  .item { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--hairline-soft); cursor:pointer; }
+  .item:last-child { border-bottom:0; }
+  .item input { position:absolute; opacity:0; pointer-events:none; }
+  .box { flex:none; width:28px; height:28px; border-radius:9999px; border:1.5px solid #cfd3da; display:flex; align-items:center; justify-content:center; transition:background .15s, border-color .15s; }
+  .box svg { width:14px; height:14px; opacity:0; }
+  .item.done .box { background:var(--ok); border-color:var(--ok); }
+  .item.done .box svg { opacity:1; }
+  .item .t { flex:1; font-size:15px; line-height:1.45; }
+  .item.done .t { color:var(--slate); }
+  .item .icon-btn, .sig .icon-btn, .edit-item .icon-btn { border:0; color:var(--muted); }
+  .add-row { margin-top:12px; }
+
+  /* 사진 */
+  .photos { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .photos .ph { position:relative; aspect-ratio:1; }
+  .photos img { width:100%; height:100%; object-fit:cover; border-radius:12px; display:block; }
+  .photos .icon-btn { position:absolute; top:6px; right:6px; width:28px; height:28px; border:0; background:rgba(10,10,10,.6); color:#fff; }
+  .add-photo { aspect-ratio:1; border:1.5px dashed #cfd3da; border-radius:12px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; color:var(--steel); font-size:13px; font-weight:600; cursor:pointer; background:var(--surface); }
+  .add-photo svg { width:26px; height:26px; }
+
+  /* 서명 */
+  .sig { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--hairline-soft); }
+  .sig .no { flex:none; width:28px; height:28px; border-radius:9999px; background:var(--surface-soft); font-size:13px; font-weight:600; color:var(--slate); display:flex; align-items:center; justify-content:center; }
+  .sig .n { flex:1; font-weight:600; }
+  .sig img { height:44px; width:110px; object-fit:contain; border:1px solid var(--hairline); border-radius:8px; background:#fff; }
+  .empty { color:var(--stone); font-size:14px; padding:4px 0 8px; }
+
+  /* 뱃지 */
+  .badge { display:inline-block; font-size:12px; font-weight:600; padding:3px 10px; border-radius:9999px; background:var(--surface-soft); color:var(--slate); white-space:nowrap; }
+  .badge.ok { background:var(--ok-bg); color:var(--ok); }
+
+  /* 목록 */
+  .list { display:flex; flex-direction:column; gap:8px; }
+  .li { display:flex; align-items:center; gap:14px; background:var(--canvas); border:1px solid var(--hairline); border-radius:16px; padding:14px 16px; color:inherit; text-decoration:none; }
+  .li:active { background:var(--surface); }
+  .li .date { flex:none; width:48px; text-align:center; }
+  .li .date b { display:block; font-size:22px; font-weight:600; line-height:1.1; letter-spacing:-.5px; }
+  .li .date span { font-size:12px; color:var(--steel); }
+  .li .body { flex:1; min-width:0; }
+  .li .body b { display:block; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .li .body small { display:block; color:var(--steel); font-size:13px; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .li .badges { display:flex; gap:4px; margin-top:8px; flex-wrap:wrap; }
+  .li .chev { flex:none; color:var(--muted); }
+  .search { margin-bottom:16px; padding-left:40px !important; background:var(--canvas) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='none' stroke='%238e8e93' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='8' cy='8' r='6'/%3E%3Cpath d='M12.5 12.5L16 16'/%3E%3C/svg%3E") no-repeat 14px center; }
+  .search:focus { padding-left:39px !important; }
+  .empty-state { text-align:center; padding:48px 16px; color:var(--steel); }
+  .empty-state b { display:block; color:var(--ink); font-size:18px; font-weight:600; margin-bottom:4px; }
+
+  /* 서명 패드 (바텀시트) */
+  .modal { position:fixed; inset:0; z-index:20; background:rgba(10,10,10,.5); display:flex; align-items:flex-end; justify-content:center; }
+  .sheet { width:100%; max-width:640px; background:var(--canvas); border-radius:24px 24px 0 0; padding:12px 20px calc(20px + env(safe-area-inset-bottom)); box-shadow:var(--shadow-modal); }
+  .grab { width:40px; height:4px; border-radius:9999px; background:var(--hairline); margin:0 auto 16px; }
+  .sheet h2 { font-size:20px; font-weight:600; margin-bottom:4px; }
+  .sheet .page-sub { margin-bottom:16px; }
+  .pad-wrap { position:relative; margin-top:14px; }
+  #pad { width:100%; height:220px; border:1px solid var(--hairline); border-radius:16px; touch-action:none; background:var(--surface); display:block; }
+  .pad-wrap .hint { position:absolute; left:20px; right:20px; bottom:44px; border-bottom:1px dashed #cfd3da; pointer-events:none; }
+  .pad-wrap .hint span { position:absolute; left:0; bottom:6px; font-size:12px; color:var(--muted); }
+
+  /* 기록 문서 (인쇄 겸용) */
+  .doc h2 { text-align:center; font-size:20px; font-weight:600; letter-spacing:-.3px; margin:4px 0 20px; }
+  .doc table { width:100%; border-collapse:separate; border-spacing:0; border:1px solid var(--hairline); border-radius:8px; overflow:hidden; margin-bottom:16px; font-size:14px; }
+  .doc th, .doc td { padding:10px 12px; text-align:left; vertical-align:middle; border-bottom:1px solid var(--hairline-soft); }
+  .doc tr:last-child > * { border-bottom:0; }
+  .doc th { background:var(--surface); color:var(--steel); font-size:13px; font-weight:600; white-space:nowrap; }
+  .doc td.c { text-align:center; width:52px; }
+  .doc .chk { color:var(--ok); font-weight:700; }
+  .doc .nochk { color:var(--err); font-weight:700; }
+  .doc .sigimg { height:40px; max-width:150px; display:block; }
+  .doc .photos { grid-template-columns:repeat(2,1fr); }
+  .doc .photos img { aspect-ratio:4/3; height:auto; }
+  .doc .cap { font-size:13px; font-weight:600; color:var(--steel); margin:4px 0 8px; }
+  .actions { display:flex; gap:8px; margin:16px 0; }
+  .actions .btn { flex:1; }
+  .topbar { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+  .topbar .icon-btn { width:40px; height:40px; color:var(--ink); }
+  .topbar .icon-btn svg { width:18px; height:18px; }
+  .topbar b { font-weight:600; font-size:16px; }
+
+  /* 체크리스트 편집 */
+  .edit-item { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+  .edit-item .n { flex:none; width:22px; font-size:13px; font-weight:600; color:var(--stone); text-align:right; font-variant-numeric:tabular-nums; }
+
+  @media (max-width:480px) { .card.doc { padding:20px 12px; } .doc th, .doc td { padding:10px 8px; } }
+
+  @media print {
+    body { background:#fff; padding:0; font-size:12px; }
+    header, nav, .noprint { display:none !important; }
+    main { padding:0; max-width:none; }
+    .card { border:0; padding:0; border-radius:0; }
+    .doc table { break-inside:avoid; }
+    .doc .photos .ph { break-inside:avoid; }
+    @page { size:A4; margin:12mm; }
+  }
+</style>
+</head>
+<body>
+<header><span class="mark">TBM</span><span class="name">안전조회</span><span class="off">오프라인</span></header>
+<main id="app"></main>
+<nav>
+  <button data-v="new"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg>오늘 조회</button>
+  <button data-v="records"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>지난 기록</button>
+  <button data-v="templates"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>체크리스트</button>
+</nav>
+<div id="modal"></div>
+
+<script>
+// ---------- 오프라인 지원 ----------
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js');
+const syncOnline = () => document.body.classList.toggle('offline', !navigator.onLine);
+addEventListener('online', syncOnline); addEventListener('offline', syncOnline); syncOnline();
+
+// ---------- 저장소 (IndexedDB: 사진·서명이 커서 localStorage 대신 사용) ----------
+const dbp = new Promise((res, rej) => {
+  const r = indexedDB.open('tbm', 1);
+  r.onupgradeneeded = () => ['records', 'templates', 'meta'].forEach(s => r.result.createObjectStore(s, { keyPath: 'id' }));
+  r.onsuccess = () => res(r.result);
+  r.onerror = () => rej(r.error);
+});
+function tx(store, mode, fn) {
+  return dbp.then(d => new Promise((res, rej) => {
+    const t = d.transaction(store, mode), req = fn(t.objectStore(store));
+    t.oncomplete = () => res(req.result);
+    t.onerror = () => rej(t.error);
+  }));
+}
+const getAll = s => tx(s, 'readonly', st => st.getAll());
+const get = (s, id) => tx(s, 'readonly', st => st.get(id));
+const put = (s, v) => tx(s, 'readwrite', st => st.put(v));
+const del = (s, id) => tx(s, 'readwrite', st => st.delete(id));
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const dateLabel = d => { const [y, m, dd] = d.split('-').map(Number); return `${y}년 ${m}월 ${dd}일 (${'일월화수목금토'[new Date(y, m - 1, dd).getDay()]})`; };
+const $ = s => document.querySelector(s);
+const app = $('#app');
+
+const I = {
+  x: '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"/></svg>',
+  check: '<svg viewBox="0 0 14 14" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5l2.5 2.5L11 4.5"/></svg>',
+  back: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3L5 9l6 6"/></svg>',
+  chev: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>',
+  cam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+  pen: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+};
+
+const DEFAULT_TEMPLATES = [
+  { name: '지붕 위 모듈 설치 (고소작업)', items: [
+    '안전모·안전화·안전대 착용 상태 확인',
+    '안전대 부착설비(구명줄) 설치 및 체결 위치 확인',
+    '지붕 가장자리·채광창(선라이트) 등 추락 위험 부위 확인',
+    '사다리·고소작업대 상태 및 고정 확인',
+    '모듈 인양·운반 방법 확인 (2인 1조)',
+    '공구·자재 낙하 방지 조치, 하부 출입 통제',
+    '강풍·우천·폭염 시 작업중지 기준 공유',
+    '작업자 건강상태 및 음주 여부 확인'] },
+  { name: '전기 결선·인버터 작업', items: [
+    '절연장갑·절연화 등 보호구 착용',
+    '모듈 직류(DC) 전압 존재 인지 — 낮에는 발전 중, 감전 주의',
+    '차단기 개방 및 잠금·표지 부착 확인',
+    '검전기로 무전압 확인 후 작업',
+    '접속반·인버터 결선 순서 공유',
+    '젖은 손·우천 시 전기작업 금지',
+    '작업자 건강상태 및 음주 여부 확인'] },
+  { name: '구조물(가대·앵커) 설치', items: [
+    '드릴·그라인더 등 전동공구 점검 (전선 피복, 접지)',
+    '보안경·방진마스크·귀마개 착용',
+    '용접·절단 시 화재감시자 배치, 소화기 비치',
+    '중량물 인양 시 신호수 지정',
+    '작업구역 정리정돈, 넘어질 수 있는 자재 고정',
+    '작업자 건강상태 및 음주 여부 확인'] },
+];
+
+async function templates() {
+  let ts = await getAll('templates');
+  if (!ts.length) {
+    ts = DEFAULT_TEMPLATES.map((t, i) => ({ id: '0' + i, ...t })); // 기본 순서 유지 (새로 만든 유형은 뒤로)
+    for (const t of ts) await put('templates', t);
+  }
+  return ts;
+}
+
+// ---------- 화면 전환 ----------
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => go(b.dataset.v));
+function go(v, arg) {
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', v.startsWith(b.dataset.v.slice(0, 6))));
+  window.scrollTo(0, 0);
+  ({ new: viewNew, records: viewRecords, record: viewRecord, templates: viewTemplates, template: viewTemplate })[v](arg);
+}
+
+// ---------- 오늘 조회 (작성 중인 내용은 자동 임시저장) ----------
+let draft;
+const saveDraft = () => put('meta', { ...draft, id: 'draft' });
+
+async function newDraft() {
+  const ts = await templates();
+  return { date: today(), site: '', leader: '', templateId: ts[0].id, items: ts[0].items.map(text => ({ text, checked: false })), note: '', photos: [], signs: [] };
+}
+
+function refreshHero() {
+  $('#h-site').textContent = draft.site || '현장명을 입력하세요';
+  $('#h-date').textContent = dateLabel(draft.date || today());
+  $('#h-chk').textContent = `${draft.items.filter(i => i.checked).length}/${draft.items.length}`;
+  $('#chk-meta').textContent = `${draft.items.filter(i => i.checked).length} / ${draft.items.length}`;
+}
+
+async function viewNew() {
+  draft = draft || (await get('meta', 'draft')) || await newDraft();
+  const ts = await templates();
+  const recs = await getAll('records');
+  const sites = [...new Set(recs.map(r => r.site))];
+  const leaders = [...new Set(recs.map(r => r.leader).filter(Boolean))];
+  app.innerHTML = `
+    <section class="hero">
+      <div class="hero-top"><span class="badge-w">TODAY</span><span id="h-date"></span></div>
+      <h1>오늘의 안전조회</h1>
+      <p class="site" id="h-site"></p>
+      <div class="stats">
+        <div><b id="h-chk"></b><span>점검 완료</span></div>
+        <div><b>${draft.signs.length}</b><span>서명 인원</span></div>
+        <div><b>${draft.photos.length}</b><span>인증 사진</span></div>
+      </div>
+    </section>
+
+    <div class="card">
+      <div class="sec-h"><span class="num">01</span><h2>기본 정보</h2></div>
+      <label class="f" for="date">날짜</label><input type="date" id="date" value="${esc(draft.date)}">
+      <label class="f" for="site">현장명</label><input type="text" id="site" list="sites" value="${esc(draft.site)}" placeholder="예: OO읍 OO창고 지붕">
+      <datalist id="sites">${sites.map(s => `<option value="${esc(s)}">`).join('')}</datalist>
+      <label class="f" for="leader">작성자 (관리감독자)</label><input type="text" id="leader" list="leaders" value="${esc(draft.leader)}" placeholder="이름">
+      <datalist id="leaders">${leaders.map(s => `<option value="${esc(s)}">`).join('')}</datalist>
+    </div>
+
+    <div class="card">
+      <div class="sec-h"><span class="num">02</span><h2>위험성 체크리스트</h2><span class="meta" id="chk-meta"></span></div>
+      <label class="f" for="tpl">작업 유형</label>
+      <select id="tpl">${ts.map(t => `<option value="${t.id}" ${t.id === draft.templateId ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select>
+      <div style="margin-top:8px">${draft.items.map((it, i) => `
+        <label class="item ${it.checked ? 'done' : ''}">
+          <input type="checkbox" data-i="${i}" ${it.checked ? 'checked' : ''}>
+          <span class="box">${I.check}</span>
+          <span class="t">${esc(it.text)}</span>
+          <button class="icon-btn" data-del="${i}" aria-label="항목 삭제">${I.x}</button>
+        </label>`).join('')}</div>
+      <div class="row add-row">
+        <input type="text" class="grow" id="newItem" placeholder="오늘만 추가할 항목">
+        <button class="btn" id="addItem">추가</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="sec-h"><span class="num">03</span><h2>특이사항·전달사항</h2></div>
+      <textarea id="note" placeholder="오늘 현장 특이사항, 날씨, 주의할 점 등">${esc(draft.note)}</textarea>
+    </div>
+
+    <div class="card">
+      <div class="sec-h"><span class="num">04</span><h2>조회 인증 사진</h2><span class="meta">${draft.photos.length}장</span></div>
+      <div class="photos">
+        ${draft.photos.map((p, i) => `<div class="ph"><img src="${p}" alt=""><button class="icon-btn" data-delphoto="${i}" aria-label="사진 삭제">${I.x}</button></div>`).join('')}
+        <label class="add-photo">${I.cam}사진 추가<input type="file" id="photo" accept="image/*" multiple hidden></label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="sec-h"><span class="num">05</span><h2>참석자 서명</h2><span class="meta">${draft.signs.length}명</span></div>
+      ${draft.signs.length ? draft.signs.map((s, i) => `
+        <div class="sig"><span class="no">${i + 1}</span><span class="n">${esc(s.name)}</span><img src="${s.img}" alt="${esc(s.name)} 서명"><button class="icon-btn" data-delsign="${i}" aria-label="서명 삭제">${I.x}</button></div>`).join('')
+        : '<p class="empty">아직 서명한 사람이 없습니다.</p>'}
+      <button class="btn full" id="sign" style="margin-top:14px">${I.pen}서명 추가</button>
+    </div>
+
+    <button class="btn full lg" id="save" style="margin-top:8px">조회 저장</button>
+    <button class="btn link full" id="reset">처음부터 다시 작성</button>`;
+  refreshHero();
+
+  ['date', 'site', 'leader', 'note'].forEach(k => $('#' + k).oninput = e => { draft[k] = e.target.value; saveDraft(); refreshHero(); });
+  $('#tpl').onchange = async e => {
+    const t = ts.find(t => t.id === e.target.value);
+    if (draft.items.some(i => i.checked) && !confirm('체크한 내용이 지워집니다. 바꿀까요?')) { e.target.value = draft.templateId; return; }
+    draft.templateId = t.id;
+    draft.items = t.items.map(text => ({ text, checked: false }));
+    saveDraft(); viewNew();
+  };
+  app.querySelectorAll('[data-i]').forEach(c => c.onchange = () => {
+    draft.items[c.dataset.i].checked = c.checked;
+    c.parentNode.classList.toggle('done', c.checked);
+    saveDraft(); refreshHero();
+  });
+  app.querySelectorAll('[data-del]').forEach(b => b.onclick = e => { e.preventDefault(); draft.items.splice(b.dataset.del, 1); saveDraft(); viewNew(); });
+  $('#addItem').onclick = () => {
+    const v = $('#newItem').value.trim();
+    if (!v) return;
+    draft.items.push({ text: v, checked: false }); saveDraft(); viewNew();
+  };
+  $('#photo').onchange = async e => {
+    for (const f of e.target.files) draft.photos.push(await shrink(f));
+    saveDraft(); viewNew();
+  };
+  app.querySelectorAll('[data-delphoto]').forEach(b => b.onclick = () => { if (confirm('사진을 지울까요?')) { draft.photos.splice(b.dataset.delphoto, 1); saveDraft(); viewNew(); } });
+  app.querySelectorAll('[data-delsign]').forEach(b => b.onclick = () => { if (confirm('서명을 지울까요?')) { draft.signs.splice(b.dataset.delsign, 1); saveDraft(); viewNew(); } });
+  $('#sign').onclick = () => openSignPad(leaders.concat(recs.flatMap(r => r.signs.map(s => s.name))));
+  $('#reset').onclick = async () => { if (confirm('작성 중인 내용을 모두 지울까요?')) { draft = await newDraft(); saveDraft(); viewNew(); } };
+  $('#save').onclick = async () => {
+    if (!draft.site.trim()) return alert('현장명을 입력하세요.');
+    if (!draft.signs.length) return alert('서명이 한 명도 없습니다.');
+    const left = draft.items.filter(i => !i.checked).length;
+    if (left && !confirm(`체크하지 않은 항목이 ${left}개 있습니다. 그대로 저장할까요?`)) return;
+    const t = ts.find(t => t.id === draft.templateId);
+    const rec = { ...draft, id: uid(), templateName: t ? t.name : '', savedAt: new Date().toISOString() };
+    await put('records', rec);
+    await del('meta', 'draft');
+    draft = null;
+    go('record', rec.id);
+  };
+}
+
+// 폰 사진은 수 MB라서 긴 변 1280px JPEG로 줄여 저장
+function shrink(file) {
+  return new Promise(res => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, 1280 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = img.width * k; c.height = img.height * k;
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      res(c.toDataURL('image/jpeg', 0.75));
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function openSignPad(knownNames) {
+  const names = [...new Set(knownNames)];
+  $('#modal').innerHTML = `<div class="modal"><div class="sheet">
+    <div class="grab"></div>
+    <h2>참석자 서명</h2>
+    <p class="page-sub">오늘 안전조회 내용을 들었으면 이름을 쓰고 서명하세요.</p>
+    <label class="f" for="sname">이름</label>
+    <input type="text" id="sname" list="snames" autocomplete="off" placeholder="이름">
+    <datalist id="snames">${names.map(n => `<option value="${esc(n)}">`).join('')}</datalist>
+    <div class="pad-wrap"><canvas id="pad"></canvas><div class="hint"><span>여기에 손가락으로 서명</span></div></div>
+    <div class="row" style="margin-top:16px">
+      <button class="btn ter" id="sclear">다시 쓰기</button>
+      <span class="grow"></span>
+      <button class="btn ter" id="scancel">취소</button>
+      <button class="btn" id="sok">등록</button>
+    </div></div></div>`;
+  const cv = $('#pad'), r = window.devicePixelRatio || 1;
+  cv.width = cv.clientWidth * r; cv.height = cv.clientHeight * r;
+  const ctx = cv.getContext('2d');
+  ctx.scale(r, r); ctx.lineWidth = 3; ctx.lineCap = ctx.lineJoin = 'round'; ctx.strokeStyle = '#0a0a0a';
+  let drawing = false, drawn = false;
+  const pos = e => { const b = cv.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
+  cv.onpointerdown = e => { drawing = true; cv.setPointerCapture(e.pointerId); ctx.beginPath(); ctx.moveTo(...pos(e)); };
+  cv.onpointermove = e => { if (!drawing) return; ctx.lineTo(...pos(e)); ctx.stroke(); drawn = true; $('.hint').style.display = 'none'; };
+  cv.onpointerup = cv.onpointercancel = () => drawing = false;
+  $('#sclear').onclick = () => { ctx.clearRect(0, 0, cv.width, cv.height); drawn = false; $('.hint').style.display = ''; };
+  $('#scancel').onclick = () => $('#modal').innerHTML = '';
+  $('.modal').onclick = e => { if (e.target.classList.contains('modal')) $('#modal').innerHTML = ''; };
+  $('#sok').onclick = () => {
+    const name = $('#sname').value.trim();
+    if (!name) return alert('이름을 입력하세요.');
+    if (!drawn) return alert('서명을 그려 주세요.');
+    if (draft.signs.some(s => s.name === name) && !confirm(`${name} 님은 이미 서명했습니다. 추가로 등록할까요?`)) return;
+    draft.signs.push({ name, img: cv.toDataURL('image/png'), time: new Date().toISOString() });
+    saveDraft();
+    $('#modal').innerHTML = '';
+    viewNew();
+  };
+}
+
+// ---------- 지난 기록 ----------
+async function viewRecords() {
+  const recs = (await getAll('records')).sort((a, b) => (b.date + b.savedAt).localeCompare(a.date + a.savedAt));
+  app.innerHTML = `
+    <h1 class="page-title">지난 기록</h1>
+    <p class="page-sub">저장된 조회 ${recs.length}건</p>
+    <input type="search" class="search" id="q" placeholder="현장명·날짜·이름으로 찾기">
+    <div class="list" id="list"></div>`;
+  const draw = q => {
+    const hit = recs.filter(r => !q || [r.date, r.site, r.leader, ...r.signs.map(s => s.name)].join(' ').includes(q));
+    $('#list').innerHTML = hit.length ? hit.map(r => {
+      const [y, m, d] = r.date.split('-');
+      const allOk = r.items.every(i => i.checked);
+      return `<a href="#" class="li" data-id="${r.id}">
+        <div class="date"><b>${+d}</b><span>${y.slice(2)}.${m}</span></div>
+        <div class="body"><b>${esc(r.site)}</b><small>${esc(r.templateName)}</small>
+          <div class="badges"><span class="badge ${allOk ? 'ok' : ''}">점검 ${r.items.filter(i => i.checked).length}/${r.items.length}</span><span class="badge">서명 ${r.signs.length}명</span><span class="badge">사진 ${r.photos.length}</span></div>
+        </div><span class="chev">${I.chev}</span></a>`;
+    }).join('')
+      : `<div class="empty-state"><b>${recs.length ? '찾는 기록이 없어요' : '아직 기록이 없어요'}</b>${recs.length ? '다른 검색어로 찾아보세요.' : '오늘 조회를 저장하면 여기에 쌓입니다.'}</div>`;
+    $('#list').querySelectorAll('a').forEach(a => a.onclick = e => { e.preventDefault(); go('record', a.dataset.id); });
+  };
+  $('#q').oninput = e => draw(e.target.value.trim());
+  draw('');
+}
+
+async function viewRecord(id) {
+  const r = await get('records', id);
+  app.innerHTML = `
+    <div class="topbar noprint"><button class="icon-btn" id="back" aria-label="목록으로">${I.back}</button><b>${esc(r.site)}</b></div>
+    <div class="card doc">
+      <h2>TBM (작업 전 안전점검회의) 일지</h2>
+      <table>
+        <tr><th>일자</th><td>${esc(dateLabel(r.date))}</td></tr>
+        <tr><th>현장명</th><td>${esc(r.site)}</td></tr>
+        <tr><th>작업 유형</th><td>${esc(r.templateName)}</td></tr>
+        <tr><th>작성자</th><td>${esc(r.leader)}</td></tr>
+      </table>
+      <table>
+        <tr><th>번호</th><th>위험요인 점검 항목</th><th>확인</th></tr>
+        ${r.items.map((it, i) => `<tr><td class="c">${i + 1}</td><td>${esc(it.text)}</td><td class="c ${it.checked ? 'chk' : 'nochk'}">${it.checked ? '✔' : '✘'}</td></tr>`).join('')}
+      </table>
+      ${r.note ? `<table><tr><th>특이사항·전달사항</th></tr><tr><td style="white-space:pre-wrap">${esc(r.note)}</td></tr></table>` : ''}
+      <table>
+        <tr><th>번호</th><th>성명</th><th>서명</th></tr>
+        ${r.signs.map((s, i) => `<tr><td class="c">${i + 1}</td><td>${esc(s.name)}</td><td><img class="sigimg" src="${s.img}" alt=""></td></tr>`).join('')}
+      </table>
+      ${r.photos.length ? `<p class="cap">조회 인증 사진</p><div class="photos">${r.photos.map(p => `<div class="ph"><img src="${p}" alt=""></div>`).join('')}</div>` : ''}
+    </div>
+    <div class="actions noprint">
+      <button class="btn danger" id="delrec">삭제</button>
+      <button class="btn" id="print" style="flex:2">PDF 저장·인쇄</button>
+    </div>`;
+  $('#back').onclick = () => go('records');
+  $('#print').onclick = () => window.print();
+  $('#delrec').onclick = async () => {
+    if (!confirm('이 조회 기록을 삭제할까요? 되돌릴 수 없습니다.')) return;
+    await del('records', id); go('records');
+  };
+}
+
+// ---------- 체크리스트(작업 유형별 템플릿) 편집 ----------
+async function viewTemplates() {
+  const ts = await templates();
+  app.innerHTML = `
+    <h1 class="page-title">체크리스트</h1>
+    <p class="page-sub">작업 유형별 기본 점검 항목입니다. 눌러서 고치세요.</p>
+    <div class="list">${ts.map(t => `
+      <a href="#" class="li" data-id="${t.id}">
+        <div class="body"><b>${esc(t.name)}</b><small>${t.items.length}개 항목</small></div>
+        <span class="chev">${I.chev}</span></a>`).join('')}</div>
+    <button class="btn ter full" id="addtpl" style="margin-top:16px">+ 새 작업 유형 만들기</button>`;
+  app.querySelectorAll('[data-id]').forEach(a => a.onclick = e => { e.preventDefault(); go('template', a.dataset.id); });
+  $('#addtpl').onclick = async () => {
+    const t = { id: uid(), name: '새 작업 유형', items: [] };
+    await put('templates', t); go('template', t.id);
+  };
+}
+
+async function viewTemplate(id) {
+  const t = await get('templates', id);
+  const save = () => put('templates', t);
+  app.innerHTML = `
+    <div class="topbar"><button class="icon-btn" id="back" aria-label="목록으로">${I.back}</button><b>체크리스트 편집</b></div>
+    <div class="card">
+      <label class="f" for="tname">작업 유형 이름</label>
+      <input type="text" id="tname" value="${esc(t.name)}">
+    </div>
+    <div class="card">
+      <div class="sec-h"><h2>점검 항목</h2><span class="meta">${t.items.length}개</span></div>
+      ${t.items.map((it, i) => `
+        <div class="edit-item">
+          <span class="n">${i + 1}</span>
+          <input type="text" class="grow" data-i="${i}" value="${esc(it)}">
+          <button class="icon-btn" data-del="${i}" aria-label="항목 삭제">${I.x}</button>
+        </div>`).join('')}
+      <div class="row add-row">
+        <input type="text" class="grow" id="newItem" placeholder="새 항목">
+        <button class="btn" id="addItem">추가</button>
+      </div>
+    </div>
+    <button class="btn danger full" id="deltpl">이 작업 유형 삭제</button>`;
+  $('#back').onclick = () => go('templates');
+  $('#tname').oninput = e => { t.name = e.target.value; save(); };
+  app.querySelectorAll('[data-i]').forEach(inp => inp.oninput = () => { t.items[inp.dataset.i] = inp.value; save(); });
+  app.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => { t.items.splice(b.dataset.del, 1); await save(); viewTemplate(id); });
+  $('#addItem').onclick = async () => {
+    const v = $('#newItem').value.trim();
+    if (!v) return;
+    t.items.push(v); await save(); viewTemplate(id);
+  };
+  $('#deltpl').onclick = async () => {
+    if (!confirm(`"${t.name}" 작업 유형을 삭제할까요?`)) return;
+    await del('templates', id); go('templates');
+  };
+}
+
+go('new');
+</script>
+</body>
+</html>

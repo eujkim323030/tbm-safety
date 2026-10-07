@@ -108,6 +108,17 @@
   .badge { display:inline-block; font-size:12px; font-weight:600; padding:3px 10px; border-radius:9999px; background:var(--surface-soft); color:var(--slate); white-space:nowrap; }
   .badge.ok { background:var(--ok-bg); color:var(--ok); }
   .badge.warn { background:#fff1ec; color:#c2410c; }
+  .badge.info { background:#e6efff; color:var(--blue-deep); }
+  .chip { display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:600; padding:5px 10px; border-radius:9999px; white-space:nowrap; background:var(--surface-soft); color:var(--slate); }
+  .chip.ok { background:var(--ok-bg); color:var(--ok); }
+  .chip.warn { background:#fff1ec; color:#c2410c; }
+  .pchips { display:flex; flex-wrap:wrap; gap:8px; }
+  .pchip { display:inline-flex; align-items:center; gap:6px; min-height:46px; padding:0 18px; border-radius:9999px; border:1.5px solid var(--hairline); background:var(--canvas); font-size:16px; font-weight:600; }
+  .pchip:active { background:var(--surface); }
+  .pchip.done { background:var(--ok-bg); border-color:transparent; color:var(--ok); }
+  .pchip svg { width:14px; height:14px; }
+  .sub-h { font-size:13px; font-weight:600; color:var(--steel); margin:18px 0 2px; }
+  .avatar { flex:none; width:38px; height:38px; border-radius:9999px; background:#fff1ec; color:#c2410c; font-weight:700; display:flex; align-items:center; justify-content:center; }
   .seg { display:flex; gap:8px; }
   .seg button { flex:1; min-height:44px; border-radius:9999px; border:1px solid var(--hairline); background:var(--canvas); color:var(--steel); font-size:15px; font-weight:600; }
   .seg button.on { background:var(--ink); border-color:var(--ink); color:#fff; }
@@ -122,7 +133,8 @@
   .acc .dot { flex:none; width:32px; height:32px; border-radius:9999px; border:1.5px solid #cfd3da; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:700; color:var(--steel); }
   .acc .dot i { font-style:normal; }
   .acc .dot svg { width:15px; height:15px; display:none; }
-  .acc.open:not(.done) .dot { background:var(--ink); border-color:var(--ink); color:#fff; }
+  .acc.open { border-color:var(--coral); box-shadow:0 0 0 1px var(--coral); }
+  .acc.open:not(.done) .dot { background:var(--coral); border-color:var(--coral); color:#fff; }
   .acc.done .dot { background:var(--ok); border-color:var(--ok); }
   .acc.done .dot i { display:none; }
   .acc.done .dot svg { display:block; }
@@ -285,6 +297,7 @@ const I = {
   cam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
   cloud: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18z"/></svg>',
   plus: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>',
+  tick: '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5l2.5 2.5L11 4.5"/></svg>',
   pen: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
 };
 
@@ -378,6 +391,17 @@ function go(v, arg) {
   ({ new: viewNew, records: viewRecords, record: viewRecord, templates: viewTemplates, template: viewTemplate })[v](arg);
 }
 
+// ---------- 참석자 명단 (직원이 대부분 고정이라 저장해 두고, 서명할 때 이름만 누른다) ----------
+async function roster() {
+  let r = await get('meta', 'roster');
+  if (!r) { // 처음엔 지난 기록에 서명했던 이름으로 채운다
+    r = { id: 'roster', names: [...new Set((await getAll('records')).flatMap(x => x.signs.map(s => s.name)))] };
+    await put('meta', r);
+  }
+  return r.names;
+}
+const saveRoster = names => put('meta', { id: 'roster', names });
+
 // ---------- 오늘 조회 (작성 중인 내용은 자동 임시저장) ----------
 let draft, moreOpen = {}, step = 1;
 const saveDraft = () => { refreshSteps(); return put('meta', { ...draft, id: 'draft' }); };
@@ -398,12 +422,20 @@ const stepSummary = n => [
   () => `사진 ${draft.photos.length}장`,
   () => draft.signs.length ? `${draft.signs.length}명 · ${draft.signs.slice(0, 3).map(s => s.name).join(', ')}${draft.signs.length > 3 ? ' 외' : ''}` : '아직 없음',
 ][n - 1]();
+function refreshProgress() {
+  const el = $('#prog');
+  if (!el) return;
+  const d = [1, 2, 3, 4, 5].filter(n => stepDone(n)).length;
+  el.className = `chip ${d === STEPS.length ? 'ok' : 'warn'}`;
+  el.textContent = `${d}/${STEPS.length} ${d === STEPS.length ? '완료' : '진행 중'}`;
+}
 function refreshSteps() {
   app.querySelectorAll('.acc').forEach(a => {
     const n = +a.dataset.sec;
     a.classList.toggle('done', !!stepDone(n));
     a.querySelector('.acc-t small').textContent = stepSummary(n);
   });
+  refreshProgress();
 }
 function showStep(n, scroll) {
   step = n; // 0이면 모두 접힘
@@ -424,6 +456,7 @@ async function viewNew() {
   const recs = await getAll('records');
   const sites = [...new Set(recs.map(r => r.site))];
   const leaders = [...new Set(recs.map(r => r.leader).filter(Boolean))];
+  const people = await roster();
   const bk = await backupState();
   const needBackup = bk.pending && (!bk.last || Date.now() - new Date(bk.last) > 7 * 864e5);
   const acc = (n, body) => `<section class="acc" data-sec="${n}">
@@ -434,7 +467,8 @@ async function viewNew() {
     ${needBackup ? `<div class="card row" style="border-color:#ffd2c2;background:#fff7f4">
       <div class="grow"><b>${bk.drive ? '드라이브에 안 올라간 기록' : '백업 안 된 기록'} ${bk.pending}건</b><p class="muted" style="font-size:13px;color:var(--steel)">${bk.last ? `마지막 백업 ${stamp(bk.last)}` : '아직 백업한 적이 없어요'}</p></div>
       <button class="btn" id="goBackup">백업하기</button></div>` : ''}
-    <h1 class="page-title" style="margin-bottom:16px">오늘의 안전조회 <small style="font-size:15px;font-weight:500;color:var(--steel);letter-spacing:0">${esc(dateLabel(draft.date || today()))}</small></h1>
+    <div class="title-row" style="margin-bottom:2px"><h1 class="page-title">오늘의 안전조회</h1><span id="prog"></span></div>
+    <p class="page-sub">${esc(dayLabel(draft.date || today()))}</p>
 
     ${acc(1, `
       <div class="dt-row">
@@ -489,10 +523,15 @@ async function viewNew() {
       </div>`)}
 
     ${acc(5, `
-      ${draft.signs.length ? draft.signs.map((s, i) => `
-        <div class="sig"><span class="no">${i + 1}</span><span class="n">${esc(s.name)}</span><img src="${s.img}" alt="${esc(s.name)} 서명"><button class="icon-btn" data-delsign="${i}" aria-label="서명 삭제">${I.x}</button></div>`).join('')
-        : '<p class="empty">아직 서명한 사람이 없습니다.</p>'}
-      <button class="btn full" id="sign" style="margin-top:14px">${I.pen}서명 추가</button>`)}
+      ${people.length ? `<p class="hint-text" style="margin-top:0">이름을 누르면 서명창이 열립니다.</p>
+      <div class="pchips">${people.map(n => {
+        const ok = draft.signs.some(s => s.name === n);
+        return `<button class="pchip ${ok ? 'done' : ''}" data-person="${esc(n)}">${ok ? I.tick : ''}${esc(n)}</button>`;
+      }).join('')}</div>`
+        : `<p class="hint-text" style="margin-top:0">체크리스트 탭 → 참석자 명단에 직원을 등록해 두면, 여기서 이름만 눌러 서명받을 수 있어요.</p>`}
+      ${draft.signs.length ? `<p class="sub-h">서명 완료 ${draft.signs.length}명</p>` + draft.signs.map((s, i) => `
+        <div class="sig"><span class="no">${i + 1}</span><span class="n">${esc(s.name)}</span><img src="${s.img}" alt="${esc(s.name)} 서명"><button class="icon-btn" data-delsign="${i}" aria-label="서명 삭제">${I.x}</button></div>`).join('') : ''}
+      <button class="btn ter full" id="sign" style="margin-top:14px">${I.pen}${people.length ? '명단에 없는 사람 서명' : '서명 추가'}</button>`)}
 
     <button class="btn full lg" id="save" style="margin-top:8px">조회 저장</button>
     <button class="btn link full" id="reset">처음부터 다시 작성</button>`;
@@ -533,6 +572,10 @@ async function viewNew() {
   app.querySelectorAll('[data-delphoto]').forEach(b => b.onclick = () => { if (confirm('사진을 지울까요?')) { draft.photos.splice(b.dataset.delphoto, 1); saveDraft(); viewNew(); } });
   app.querySelectorAll('[data-delsign]').forEach(b => b.onclick = () => { if (confirm('서명을 지울까요?')) { draft.signs.splice(b.dataset.delsign, 1); saveDraft(); viewNew(); } });
   $('#sign').onclick = () => openSignPad(leaders.concat(recs.flatMap(r => r.signs.map(s => s.name))));
+  app.querySelectorAll('[data-person]').forEach(b => b.onclick = () => {
+    if (b.classList.contains('done') && !confirm(`${b.dataset.person} 님은 이미 서명했습니다. 다시 서명받을까요?`)) return;
+    openSignPad([], b.dataset.person);
+  });
   $('#reset').onclick = async () => { if (confirm('작성 중인 내용을 모두 지울까요?')) { draft = await newDraft(); step = 1; saveDraft(); viewNew(); } };
   $('#save').onclick = async () => {
     const need = (n, msg) => { showStep(n, true); alert(msg); };
@@ -568,14 +611,14 @@ function shrink(file) {
   });
 }
 
-function openSignPad(knownNames) {
+function openSignPad(knownNames, preset = '') {
   const names = [...new Set(knownNames)];
   $('#modal').innerHTML = `<div class="modal"><div class="sheet">
     <div class="grab"></div>
     <h2>참석자 서명</h2>
     <p class="page-sub">오늘 안전조회 내용을 들었으면 이름을 쓰고 서명하세요.</p>
     <label class="f" for="sname">이름</label>
-    <input type="text" id="sname" list="snames" autocomplete="off" placeholder="이름">
+    <input type="text" id="sname" list="snames" autocomplete="off" placeholder="이름" value="${esc(preset)}">
     <datalist id="snames">${names.map(n => `<option value="${esc(n)}">`).join('')}</datalist>
     <div class="pad-wrap"><canvas id="pad"></canvas><div class="hint"><span>여기에 손가락으로 서명</span></div></div>
     <div class="row" style="margin-top:16px">
@@ -596,16 +639,18 @@ function openSignPad(knownNames) {
   $('#sclear').onclick = () => { ctx.clearRect(0, 0, cv.width, cv.height); drawn = false; $('.hint').style.display = ''; };
   $('#scancel').onclick = () => $('#modal').innerHTML = '';
   $('.modal').onclick = e => { if (e.target.classList.contains('modal')) $('#modal').innerHTML = ''; };
-  $('#sok').onclick = () => {
+  $('#sok').onclick = async () => {
     const name = $('#sname').value.trim();
     if (!name) return alert('이름을 입력하세요.');
     if (!drawn) return alert('서명을 그려 주세요.');
-    if (draft.signs.some(s => s.name === name) && !confirm(`${name} 님은 이미 서명했습니다. 추가로 등록할까요?`)) return;
+    if (!preset && draft.signs.some(s => s.name === name) && !confirm(`${name} 님은 이미 서명했습니다. 추가로 등록할까요?`)) return;
     const img = cv.toDataURL('image/png');
     if (img.length < 100) return alert('서명이 저장되지 않았습니다. 창을 닫고 다시 서명해 주세요.');
     draft.signs.push({ name, img, time: new Date().toISOString() });
     saveDraft();
     $('#modal').innerHTML = '';
+    const people = await roster();
+    if (!people.includes(name) && confirm(`${name} 님을 참석자 명단에 저장할까요?\n다음부터 이름만 눌러 서명받을 수 있어요.`)) await saveRoster([...people, name]);
     viewNew();
   };
 }
@@ -787,7 +832,7 @@ async function syncDrive() {
     const templates = await getAll('templates');
     for (const r of await getAll('records')) {
       if (synced[r.id] === recVer(r)) continue;
-      const res = await fetch(DRIVE_URL, { method: 'POST', body: JSON.stringify({ app: 'tbm-safety', version: 1, exportedAt: new Date().toISOString(), records: [r], templates }) });
+      const res = await fetch(DRIVE_URL, { method: 'POST', body: JSON.stringify({ app: 'tbm-safety', version: 1, exportedAt: new Date().toISOString(), records: [r], templates, roster: await roster() }) });
       if (!(await res.json()).ok) break;
       synced[r.id] = recVer(r);
       await put('meta', { id: 'synced', map: synced });
@@ -811,20 +856,21 @@ async function backupState() {
 }
 
 async function makeBackup() {
-  const data = { app: 'tbm-safety', version: 1, exportedAt: new Date().toISOString(), records: await getAll('records'), templates: await getAll('templates') };
+  const data = { app: 'tbm-safety', version: 1, exportedAt: new Date().toISOString(), records: await getAll('records'), templates: await getAll('templates'), roster: await roster() };
   // 휴대폰 공유창은 .json을 받지 않는 경우가 있어 텍스트 파일로 만든다 (불러올 때는 둘 다 가능)
   return new File([JSON.stringify(data)], `TBM_백업_${today()}.txt`, { type: 'text/plain' });
 }
 
 // 전체 백업 파일 하나, 또는 드라이브 자동 백업 파일(기록 1건씩) 여러 개를 한꺼번에 불러온다
 async function restoreBackup(files) {
-  const data = { records: [], templates: [] };
+  const data = { records: [], templates: [], roster: [] };
   for (const f of files) {
     let d;
     try { d = JSON.parse(await f.text()); } catch (e) { d = null; }
     if (!d || d.app !== 'tbm-safety' || !Array.isArray(d.records)) return alert(`안전조회 백업 파일이 아닙니다: ${f.name}`);
     data.records.push(...d.records);
     for (const t of d.templates || []) if (!data.templates.some(x => x.id === t.id)) data.templates.push(t);
+    data.roster.push(...(d.roster || []));
   }
   const have = new Set((await getAll('records')).map(r => r.id));
   const fresh = data.records.filter(r => !have.has(r.id)).length;
@@ -832,6 +878,7 @@ async function restoreBackup(files) {
 불러올까요? 같은 기록은 백업 내용으로 덮어씁니다.`)) return;
   for (const r of data.records) await put('records', r);
   for (const t of data.templates) await put('templates', t);
+  await saveRoster([...new Set([...(await roster()), ...data.roster])]);
   await put('meta', { id: 'tpl-v2' }); // 백업에 담긴 체크리스트를 다시 바꾸지 않도록
   alert(`불러오기 완료: 조회 기록 ${data.records.length}건`);
   $('#modal').innerHTML = '';
@@ -903,28 +950,62 @@ async function makePdf(r) {
 }
 
 // ---------- 체크리스트(작업 유형별 템플릿) 편집 ----------
+let tplTab = 'tpl';
 async function viewTemplates() {
-  const ts = await templates();
+  const ts = await templates(), people = await roster();
   app.innerHTML = `
-    <h1 class="page-title">체크리스트</h1>
-    <p class="page-sub">작업 유형별 기본 점검 항목입니다. 눌러서 고치세요.<br>기본 항목은 고용노동부·안전보건공단 「작업 전 안전점검회의(TBM) 가이드」 기준입니다.</p>
-    <div class="list">${ts.map(t => `
-      <a href="#" class="li" data-id="${t.id}">
-        <div class="body"><b>${esc(t.name)}</b><small>${t.items.length}개 항목</small></div>
-        <span class="chev">${I.chev}</span></a>`).join('')}</div>
-    <button class="btn ter full" id="addtpl" style="margin-top:16px">+ 새 작업 유형 만들기</button>`;
-  app.querySelectorAll('[data-id]').forEach(a => a.onclick = e => { e.preventDefault(); go('template', a.dataset.id); });
-  $('#addtpl').onclick = async () => {
-    const t = { id: uid(), name: '새 작업 유형', items: [] };
-    await put('templates', t); go('template', t.id);
-  };
+    <div class="title-row"><h1 class="page-title">체크리스트</h1><span class="chip">유형 ${ts.length} · 명단 ${people.length}명</span></div>
+    <div class="seg" style="margin-bottom:16px">
+      <button data-tab="tpl" class="${tplTab === 'tpl' ? 'on' : ''}">작업 유형</button>
+      <button data-tab="people" class="${tplTab === 'people' ? 'on' : ''}">참석자 명단</button>
+    </div>
+    ${tplTab === 'tpl' ? `
+      <p class="hint-text" style="margin-top:0">작업 유형별 기본 점검 항목입니다. 눌러서 고치세요. 기본 항목은 고용노동부·안전보건공단 「TBM 가이드」 기준입니다.</p>
+      <div class="grp">${ts.map(t => `
+        <a href="#" class="li" data-id="${t.id}">
+          <div class="body"><b>${esc(t.name)}</b>
+            <div class="badges">${/^\d\d$/.test(t.id) ? '<span class="badge info">기본</span>' : ''}<span class="badge">항목 ${t.items.length}개</span></div>
+          </div><span class="chev">${I.chev}</span></a>`).join('')}</div>
+      <button class="btn ter full" id="addtpl" style="margin-top:16px">+ 새 작업 유형 만들기</button>`
+    : `
+      <p class="hint-text" style="margin-top:0">자주 오는 직원을 등록해 두면, 오늘 조회 서명 단계에서 이름만 눌러 서명받을 수 있어요.</p>
+      ${people.length ? `<div class="grp">${people.map((n, i) => `
+        <div class="li"><span class="avatar">${esc(n.slice(0, 1))}</span><div class="body"><b>${esc(n)}</b></div>
+          <button class="icon-btn" data-delp="${i}" aria-label="${esc(n)} 삭제">${I.x}</button></div>`).join('')}</div>`
+        : '<div class="empty-state"><b>아직 등록된 직원이 없어요</b>아래에서 이름을 추가하세요.</div>'}
+      <div class="row add-row" style="margin-top:16px">
+        <input type="text" class="grow" id="newPerson" placeholder="직원 이름">
+        <button class="btn" id="addPerson">추가</button>
+      </div>`}`;
+  app.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tplTab = b.dataset.tab; viewTemplates(); });
+  if (tplTab === 'tpl') {
+    app.querySelectorAll('[data-id]').forEach(a => a.onclick = e => { e.preventDefault(); go('template', a.dataset.id); });
+    $('#addtpl').onclick = async () => {
+      const t = { id: uid(), name: '새 작업 유형', items: [] };
+      await put('templates', t); go('template', t.id);
+    };
+  } else {
+    app.querySelectorAll('[data-delp]').forEach(b => b.onclick = async () => {
+      if (!confirm(`${people[b.dataset.delp]} 님을 명단에서 뺄까요? (지난 기록의 서명은 그대로 남습니다)`)) return;
+      people.splice(b.dataset.delp, 1); await saveRoster(people); viewTemplates();
+    });
+    const add = async () => {
+      const v = $('#newPerson').value.trim();
+      if (!v) return;
+      if (people.includes(v)) return alert('이미 명단에 있습니다.');
+      await saveRoster([...people, v]); viewTemplates();
+      $('#newPerson').focus();
+    };
+    $('#addPerson').onclick = add;
+    $('#newPerson').onkeydown = e => { if (e.key === 'Enter') add(); };
+  }
 }
 
 async function viewTemplate(id) {
   const t = await get('templates', id);
   const save = () => put('templates', t);
   app.innerHTML = `
-    <div class="topbar"><button class="icon-btn" id="back" aria-label="목록으로">${I.back}</button><b>체크리스트 편집</b></div>
+    <div class="topbar"><button class="icon-btn" id="back" aria-label="목록으로">${I.back}</button><b>체크리스트 편집</b>${/^\d\d$/.test(id) ? '<span class="badge info" style="margin-left:auto">기본</span>' : ''}</div>
     <div class="card">
       <label class="f" for="tname">작업 유형 이름</label>
       <input type="text" id="tname" value="${esc(t.name)}">

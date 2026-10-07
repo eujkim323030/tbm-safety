@@ -63,7 +63,12 @@
 
   /* 입력 */
   label.f { display:block; font-size:13px; font-weight:600; color:var(--slate); margin:14px 0 6px; }
-  .sec-h + label.f { margin-top:0; }
+  .sec-h + label.f, .sec-h + .dt-row label.f { margin-top:0; }
+  /* 날짜·시각 한 줄: 좁은 폰에서도 글자가 잘리지 않게 달력·시계 아이콘을 숨기고 칸 전체를 눌러 고르게 */
+  .dt-row { display:grid; grid-template-columns:1.15fr 1fr; gap:8px; }
+  .dt-row input { position:relative; padding-left:12px; padding-right:8px; font-size:15px; }
+  .dt-row input:focus { padding-left:11px; padding-right:7px; }
+  .dt-row input::-webkit-calendar-picker-indicator { position:absolute; inset:0; width:auto; height:auto; opacity:0; cursor:pointer; }
   input[type=text], input[type=date], input[type=time], input[type=search], select, textarea { width:100%; min-height:44px; padding:10px 14px; font-size:16px; border:1px solid var(--hairline); border-radius:8px; background:var(--canvas); outline:none; -webkit-appearance:none; appearance:none; }
   select { background:var(--canvas) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%235f5f5f' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 14px center; padding-right:36px; }
   input:focus, select:focus, textarea:focus { border:2px solid var(--blue-deep); padding:9px 13px; }
@@ -410,8 +415,10 @@ async function viewNew() {
 
     <div class="card">
       <div class="sec-h"><span class="num">01</span><h2>기본 정보</h2></div>
-      <label class="f" for="date">날짜</label><input type="date" id="date" value="${esc(draft.date)}">
-      <label class="f" for="time">TBM 시각</label><input type="time" id="time" value="${esc(draft.time)}">
+      <div class="dt-row">
+        <div><label class="f" for="date">날짜</label><input type="date" id="date" value="${esc(draft.date)}"></div>
+        <div><label class="f" for="time">TBM 시각</label><input type="time" id="time" value="${esc(draft.time)}"></div>
+      </div>
       <label class="f" for="site">현장명 (장소)</label><input type="text" id="site" list="sites" value="${esc(draft.site)}" placeholder="예: OO읍 OO창고 지붕">
       <datalist id="sites">${sites.map(s => `<option value="${esc(s)}">`).join('')}</datalist>
       <label class="f" for="work">오늘 작업내용</label><input type="text" id="work" value="${esc(draft.work)}" placeholder="예: 창고 지붕 모듈 120장 설치">

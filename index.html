@@ -43,17 +43,6 @@
   nav button svg { width:24px; height:24px; }
   nav button.on { color:var(--ink); font-weight:600; }
 
-  /* 오늘 조회 대표 카드 (브랜드 코랄) */
-  .hero { background:var(--coral); color:#fff; border-radius:32px; padding:24px; margin-bottom:16px; }
-  .hero-top { display:flex; justify-content:space-between; align-items:center; font-size:14px; font-weight:500; opacity:.95; }
-  .badge-w { background:#fff; color:var(--coral); font-size:12px; font-weight:700; letter-spacing:.5px; padding:4px 10px; border-radius:9999px; }
-  .hero h1 { font-size:32px; font-weight:600; letter-spacing:-.5px; line-height:1.25; margin-top:20px; }
-  .hero .site { font-size:16px; opacity:.85; margin-top:4px; min-height:24px; }
-  .stats { display:grid; grid-template-columns:repeat(3,1fr); margin-top:24px; border-top:1px solid rgba(255,255,255,.3); padding-top:16px; }
-  .stats div + div { border-left:1px solid rgba(255,255,255,.3); padding-left:16px; }
-  .stats b { display:block; font-size:28px; font-weight:600; letter-spacing:-.5px; line-height:1.2; }
-  .stats span { font-size:13px; opacity:.85; }
-
   /* 카드 */
   .card { background:var(--canvas); border:1px solid var(--hairline); border-radius:16px; padding:20px; margin-bottom:12px; }
   .sec-h { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
@@ -130,22 +119,26 @@
   details.more[open] > summary svg { transform:rotate(45deg); }
   details.more > summary .opt { margin-left:auto; font-size:12px; font-weight:600; color:var(--stone); background:var(--surface-soft); padding:2px 8px; border-radius:9999px; }
   details.more[open] > summary { margin-bottom:4px; }
-  .steps { position:sticky; top:56px; z-index:4; display:grid; grid-template-columns:repeat(5,1fr); gap:4px; margin:0 -16px 16px; padding:10px 12px; background:var(--surface); border-bottom:1px solid var(--hairline-soft); }
-  .steps button { border:0; background:none; display:flex; flex-direction:column; align-items:center; gap:4px; font-size:12px; font-weight:600; color:var(--stone); padding:2px 0; }
-  .steps .dot { width:30px; height:30px; border-radius:9999px; border:1.5px solid #cfd3da; background:var(--canvas); display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; }
-  .steps .dot i { font-style:normal; }
-  .steps .dot svg { width:14px; height:14px; display:none; }
-  .steps .done .dot { background:var(--ok); border-color:var(--ok); }
-  .steps .done .dot i { display:none; }
-  .steps .done .dot svg { display:block; }
-  .steps .on { color:var(--ink); }
-  .steps .on .dot { border-color:var(--ink); box-shadow:0 0 0 3px rgba(10,10,10,.12); }
-  .steps .on:not(.done) .dot { background:var(--ink); color:#fff; }
-  .actbar { position:fixed; left:0; right:0; bottom:calc(64px + env(safe-area-inset-bottom)); z-index:5; display:flex; gap:8px; padding:10px 16px; background:var(--canvas); border-top:1px solid var(--hairline-soft); }
-  .actbar .btn { flex:1; }
-  .actbar #next { flex:2; }
-  .actbar svg { width:16px; height:16px; }
-  [data-sec] { padding-bottom:72px; }
+  body.flow > header { display:none; }
+  .stepbar { position:sticky; top:0; z-index:4; margin:-16px -16px 12px; padding:8px 16px 6px; background:var(--canvas); border-bottom:1px solid var(--hairline-soft); }
+  .stepbar .row { min-height:40px; }
+  .stepbar .icon-btn { width:40px; height:40px; color:var(--ink); }
+  .stepbar .icon-btn svg { width:18px; height:18px; }
+  #step-title { font-size:18px; font-weight:600; letter-spacing:-.3px; }
+  #step-title small { font-size:14px; font-weight:600; color:var(--stone); margin-right:8px; }
+  .segs { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; }
+  .segs button { border:0; background:none; padding:8px 0 6px; }
+  .segs i { display:block; height:6px; border-radius:9999px; background:var(--hairline); }
+  .segs .done i { background:var(--ok); }
+  .segs .on i { background:var(--ink); }
+  .fab { position:fixed; right:16px; bottom:calc(64px + 16px + env(safe-area-inset-bottom)); z-index:5; min-height:54px; padding:0 26px; font-size:17px; box-shadow:0 6px 16px rgba(10,10,10,.22); }
+  .fab svg { width:16px; height:16px; }
+  [data-sec] { padding-bottom:84px; }
+  /* 단계 바에 제목이 있으니 카드 안 제목은 숨기고 개수만 */
+  [data-sec] .sec-h .num, [data-sec] .sec-h h2 { display:none; }
+  [data-sec] .sec-h:not(:has(.meta)) { display:none; }
+  [data-sec] .sec-h { margin-bottom:12px; }
+  [data-sec] .sec-h .meta { margin-left:auto; }
   .hint-text { color:var(--steel); font-size:14px; margin:-8px 0 12px; }
 
   /* 목록 */
@@ -384,6 +377,7 @@ async function templates() {
 // ---------- 화면 전환 ----------
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => go(b.dataset.v));
 function go(v, arg) {
+  document.body.classList.toggle('flow', v === 'new');
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', v.startsWith(b.dataset.v.slice(0, 6))));
   window.scrollTo(0, 0);
   ({ new: viewNew, records: viewRecords, record: viewRecord, templates: viewTemplates, template: viewTemplate })[v](arg);
@@ -394,7 +388,7 @@ let draft, moreOpen = {}, step = 1;
 const saveDraft = () => { refreshSteps(); return put('meta', { ...draft, id: 'draft' }); };
 
 // 오늘 조회는 5단계로 나눠 한 화면에 한 단계씩. 다 채운 단계는 탭에 체크 표시
-const STEPS = ['기본', '체크', '중점위험', '사진', '서명'];
+const STEPS = ['기본 정보', '위험성 체크리스트', '중점 위험요인', '조회 인증 사진', '참석자 서명'];
 const stepDone = n => [
   () => draft.site.trim() && draft.riskAssessed != null,
   () => draft.items.length && draft.items.every(i => i.checked),
@@ -410,7 +404,8 @@ function showStep(n) {
   app.querySelectorAll('[data-sec]').forEach(sec => sec.hidden = +sec.dataset.sec !== n);
   app.querySelectorAll('[data-step]').forEach(b => b.classList.toggle('on', +b.dataset.step === n));
   $('#prev').style.visibility = n === 1 ? 'hidden' : '';
-  $('#next').innerHTML = n === STEPS.length ? '조회 저장' : `다음 · ${STEPS[n]} ${I.chev}`;
+  $('#step-title').innerHTML = `<small>${n}/${STEPS.length}</small>${STEPS[n - 1]}`;
+  $('#next').innerHTML = n === STEPS.length ? '조회 저장' : `다음 ${I.chev}`;
   refreshSteps();
   window.scrollTo(0, 0);
 }
@@ -422,10 +417,7 @@ async function newDraft() {
 }
 
 function refreshHero() {
-  $('#h-site').textContent = draft.site || '현장명을 입력하세요';
-  $('#h-date').textContent = dateLabel(draft.date || today());
-  $('#h-chk').textContent = `${draft.items.filter(i => i.checked).length}/${draft.items.length}`;
-  $('#chk-meta').textContent = `${draft.items.filter(i => i.checked).length} / ${draft.items.length}`;
+  $('#chk-meta').textContent = `확인 ${draft.items.filter(i => i.checked).length} / ${draft.items.length}`;
 }
 
 async function viewNew() {
@@ -437,22 +429,15 @@ async function viewNew() {
   const bk = await backupState();
   const needBackup = bk.pending && (!bk.last || Date.now() - new Date(bk.last) > 7 * 864e5);
   app.innerHTML = `
+    <div class="stepbar">
+      <div class="row"><button class="icon-btn" id="prev" aria-label="이전 단계">${I.back}</button><b id="step-title"></b></div>
+      <div class="segs">${STEPS.map((t, i) => `<button data-step="${i + 1}" aria-label="${i + 1}단계 ${t}"><i></i></button>`).join('')}</div>
+    </div>
+
+    <div data-sec="1">
     ${needBackup ? `<div class="card row" style="border-color:#ffd2c2;background:#fff7f4">
       <div class="grow"><b>${bk.drive ? '드라이브에 안 올라간 기록' : '백업 안 된 기록'} ${bk.pending}건</b><p class="muted" style="font-size:13px;color:var(--steel)">${bk.last ? `마지막 백업 ${stamp(bk.last)}` : '아직 백업한 적이 없어요'}</p></div>
       <button class="btn" id="goBackup">백업하기</button></div>` : ''}
-    <div class="steps">${STEPS.map((t, i) => `<button data-step="${i + 1}"><span class="dot"><i>${i + 1}</i>${I.check}</span>${t}</button>`).join('')}</div>
-
-    <div data-sec="1">
-    <section class="hero">
-      <div class="hero-top"><span class="badge-w">TODAY</span><span id="h-date"></span></div>
-      <h1>오늘의 안전조회</h1>
-      <p class="site" id="h-site"></p>
-      <div class="stats">
-        <div><b id="h-chk"></b><span>점검 완료</span></div>
-        <div><b>${draft.signs.length}</b><span>서명 인원</span></div>
-        <div><b>${draft.photos.length}</b><span>인증 사진</span></div>
-      </div>
-    </section>
 
     <div class="card">
       <div class="sec-h"><span class="num">01</span><h2>기본 정보</h2></div>
@@ -515,7 +500,7 @@ async function viewNew() {
 
     <div data-sec="4" hidden>
     <div class="card">
-      <div class="sec-h"><span class="num">04</span><h2>조회 인증 사진</h2><span class="meta">${draft.photos.length}장</span></div>
+      <div class="sec-h"><span class="num">04</span><h2>조회 인증 사진</h2><span class="meta">사진 ${draft.photos.length}장</span></div>
       <div class="photos">
         ${draft.photos.map((p, i) => `<div class="ph"><img src="${p}" alt=""><button class="icon-btn" data-delphoto="${i}" aria-label="사진 삭제">${I.x}</button></div>`).join('')}
         <label class="add-photo">${I.cam}사진 추가<input type="file" id="photo" accept="image/*" multiple hidden></label>
@@ -525,7 +510,7 @@ async function viewNew() {
 
     <div data-sec="5" hidden>
     <div class="card">
-      <div class="sec-h"><span class="num">05</span><h2>참석자 서명</h2><span class="meta">${draft.signs.length}명</span></div>
+      <div class="sec-h"><span class="num">05</span><h2>참석자 서명</h2><span class="meta">서명 ${draft.signs.length}명</span></div>
       ${draft.signs.length ? draft.signs.map((s, i) => `
         <div class="sig"><span class="no">${i + 1}</span><span class="n">${esc(s.name)}</span><img src="${s.img}" alt="${esc(s.name)} 서명"><button class="icon-btn" data-delsign="${i}" aria-label="서명 삭제">${I.x}</button></div>`).join('')
         : '<p class="empty">아직 서명한 사람이 없습니다.</p>'}
@@ -533,7 +518,7 @@ async function viewNew() {
     </div>
     </div>
 
-    <div class="actbar"><button class="btn ter" id="prev">${I.back}이전</button><button class="btn" id="next"></button></div>`;
+    <button class="btn fab" id="next"></button>`;
   refreshHero();
   showStep(step);
   app.querySelectorAll('[data-step]').forEach(b => b.onclick = () => showStep(+b.dataset.step));

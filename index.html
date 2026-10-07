@@ -119,6 +119,13 @@
   .seg { display:flex; gap:8px; }
   .seg button { flex:1; min-height:44px; border-radius:9999px; border:1px solid var(--hairline); background:var(--canvas); color:var(--steel); font-size:15px; font-weight:600; }
   .seg button.on { background:var(--ink); border-color:var(--ink); color:#fff; }
+  details.more > summary { list-style:none; display:flex; align-items:center; gap:8px; min-height:40px; cursor:pointer; font-size:15px; font-weight:600; color:var(--slate); }
+  details.more > summary::-webkit-details-marker { display:none; }
+  details.more > summary svg { width:16px; height:16px; flex:none; transition:transform .15s; }
+  details.more[open] > summary svg { transform:rotate(45deg); }
+  details.more > summary .opt { margin-left:auto; font-size:12px; font-weight:600; color:var(--stone); background:var(--surface-soft); padding:2px 8px; border-radius:9999px; }
+  details.more[open] > summary { margin-bottom:4px; }
+  .card details.more { margin-top:14px; padding-top:8px; border-top:1px solid var(--hairline-soft); }
   .hint-text { color:var(--steel); font-size:14px; margin:-8px 0 12px; }
 
   /* 목록 */
@@ -268,6 +275,7 @@ const I = {
   chev: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>',
   cam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
   cloud: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18z"/></svg>',
+  plus: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>',
   pen: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
 };
 
@@ -362,7 +370,7 @@ function go(v, arg) {
 }
 
 // ---------- 오늘 조회 (작성 중인 내용은 자동 임시저장) ----------
-let draft;
+let draft, moreOpen = {};
 const saveDraft = () => put('meta', { ...draft, id: 'draft' });
 
 async function newDraft() {
@@ -403,11 +411,8 @@ async function viewNew() {
 
     <div class="card">
       <div class="sec-h"><span class="num">01</span><h2>기본 정보</h2></div>
-      <label class="f" for="date">날짜</label><input type="date" id="date" value="${esc(draft.date)}">
-      <label class="f" for="time">TBM 시각</label><input type="time" id="time" value="${esc(draft.time)}">
       <label class="f" for="site">현장명 (장소)</label><input type="text" id="site" list="sites" value="${esc(draft.site)}" placeholder="예: OO읍 OO창고 지붕">
       <datalist id="sites">${sites.map(s => `<option value="${esc(s)}">`).join('')}</datalist>
-      <label class="f" for="work">오늘 작업내용</label><input type="text" id="work" value="${esc(draft.work)}" placeholder="예: 창고 지붕 모듈 120장 설치">
       <label class="f" for="leader">TBM 리더 (관리감독자)</label><input type="text" id="leader" list="leaders" value="${esc(draft.leader)}" placeholder="이름">
       <datalist id="leaders">${leaders.map(s => `<option value="${esc(s)}">`).join('')}</datalist>
       <label class="f">이 작업의 위험성평가를 했나요?</label>
@@ -415,6 +420,12 @@ async function viewNew() {
         <button data-ra="1" class="${draft.riskAssessed === true ? 'on' : ''}">예</button>
         <button data-ra="0" class="${draft.riskAssessed === false ? 'on' : ''}">아니오</button>
       </div>
+      <details class="more" data-more="info" ${moreOpen.info ? 'open' : ''}>
+        <summary>${I.plus}날짜·시각 바꾸기, 작업내용 적기 <span class="opt">선택</span></summary>
+        <label class="f" for="date">날짜</label><input type="date" id="date" value="${esc(draft.date)}">
+        <label class="f" for="time">TBM 시각</label><input type="time" id="time" value="${esc(draft.time)}">
+        <label class="f" for="work">오늘 작업내용</label><input type="text" id="work" value="${esc(draft.work)}" placeholder="예: 창고 지붕 모듈 120장 설치">
+      </details>
     </div>
 
     <div class="card">
@@ -444,16 +455,16 @@ async function viewNew() {
       <textarea id="focusAction" placeholder="예: 채광창 전부 덮개 설치 후 작업, 덮개 없는 구역 출입 금지, 안전대 걸고 이동">${esc(draft.focusAction)}</textarea>
     </div>
 
-    <div class="card">
-      <div class="sec-h"><span class="num">04</span><h2>전달사항·작업자 의견</h2></div>
+    <details class="card more opt-card" data-more="note" ${(moreOpen.note ?? !!(draft.note || draft.opinion)) ? 'open' : ''}>
+      <summary>${I.plus}전달사항·작업자 의견 적기 <span class="opt">선택</span></summary>
       <label class="f" for="note">전달사항·특이사항</label>
       <textarea id="note" placeholder="오늘 현장 특이사항, 날씨, 최근 사고·아차사고 사례 등">${esc(draft.note)}</textarea>
       <label class="f" for="opinion">작업자 의견·건의사항</label>
-      <textarea id="opinion" placeholder="작업자가 말한 위험요소, 불편한 점, 필요한 장비 등 (없으면 '없음')">${esc(draft.opinion)}</textarea>
-    </div>
+      <textarea id="opinion" placeholder="작업자가 말한 위험요소, 불편한 점, 필요한 장비 등">${esc(draft.opinion)}</textarea>
+    </details>
 
     <div class="card">
-      <div class="sec-h"><span class="num">05</span><h2>조회 인증 사진</h2><span class="meta">${draft.photos.length}장</span></div>
+      <div class="sec-h"><span class="num">04</span><h2>조회 인증 사진</h2><span class="meta">${draft.photos.length}장</span></div>
       <div class="photos">
         ${draft.photos.map((p, i) => `<div class="ph"><img src="${p}" alt=""><button class="icon-btn" data-delphoto="${i}" aria-label="사진 삭제">${I.x}</button></div>`).join('')}
         <label class="add-photo">${I.cam}사진 추가<input type="file" id="photo" accept="image/*" multiple hidden></label>
@@ -461,7 +472,7 @@ async function viewNew() {
     </div>
 
     <div class="card">
-      <div class="sec-h"><span class="num">06</span><h2>참석자 서명</h2><span class="meta">${draft.signs.length}명</span></div>
+      <div class="sec-h"><span class="num">05</span><h2>참석자 서명</h2><span class="meta">${draft.signs.length}명</span></div>
       ${draft.signs.length ? draft.signs.map((s, i) => `
         <div class="sig"><span class="no">${i + 1}</span><span class="n">${esc(s.name)}</span><img src="${s.img}" alt="${esc(s.name)} 서명"><button class="icon-btn" data-delsign="${i}" aria-label="서명 삭제">${I.x}</button></div>`).join('')
         : '<p class="empty">아직 서명한 사람이 없습니다.</p>'}
@@ -474,6 +485,7 @@ async function viewNew() {
   if (needBackup) $('#goBackup').onclick = () => go('records', 'backup');
 
   ['date', 'time', 'site', 'work', 'leader', 'focusRisk', 'focusAction', 'note', 'opinion'].forEach(k => $('#' + k).oninput = e => { draft[k] = e.target.value; saveDraft(); refreshHero(); });
+  app.querySelectorAll('details[data-more]').forEach(d => d.ontoggle = () => moreOpen[d.dataset.more] = d.open);
   app.querySelectorAll('[data-ra]').forEach(b => b.onclick = () => {
     draft.riskAssessed = b.dataset.ra === '1';
     app.querySelectorAll('[data-ra]').forEach(x => x.classList.toggle('on', x === b));
@@ -517,7 +529,7 @@ async function viewNew() {
     await put('records', rec);
     syncDrive();
     await del('meta', 'draft');
-    draft = null;
+    draft = null; moreOpen = {};
     go('record', rec.id);
   };
 }

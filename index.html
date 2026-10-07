@@ -46,6 +46,7 @@
   nav button svg { width:24px; height:24px; padding:3px 16px; box-sizing:content-box; border-radius:9999px; transition:background .15s; }
   nav button.on { color:var(--ink); font-weight:700; }
   nav button.on svg { background:var(--primary); }
+  body.noteam nav { display:none; }
 
   /* 카드: 테두리 없이 세이지 배경과의 면 대비로 구분 */
   .card { background:var(--canvas); border-radius:24px; padding:20px; margin-bottom:12px; }
@@ -292,8 +293,15 @@ function tx(store, mode, fn) {
 }
 const getAll = s => tx(s, 'readonly', st => st.getAll());
 const get = (s, id) => tx(s, 'readonly', st => st.get(id));
-const put = (s, v) => tx(s, 'readwrite', st => st.put(v));
-const del = (s, id) => tx(s, 'readwrite', st => st.delete(id));
+const put = (s, v) => { if (s === 'templates') markShared(); return tx(s, 'readwrite', st => st.put(v)); };
+const del = (s, id) => { if (s === 'templates') markShared(); return tx(s, 'readwrite', st => st.delete(id)); };
+// 직원 명단·체크리스트를 이 폰에서 고치면 표시해 두고 잠시 뒤 다른 폰들과 맞춘다 (기본값 채우기·받아온 내용 적용 땐 quiet)
+let quiet = false, sharedTimer;
+function markShared() {
+  if (quiet) return;
+  tx('meta', 'readwrite', st => st.put({ id: 'sharedDirty', at: new Date().toISOString() }));
+  clearTimeout(sharedTimer); sharedTimer = setTimeout(() => syncDrive(), 3000);
+}
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -380,6 +388,10 @@ const OLD_DEFAULT_ITEMS = {
 };
 
 async function templates() {
+  quiet = true;
+  try { return await loadTemplates(); } finally { quiet = false; }
+}
+async function loadTemplates() {
   let ts = await getAll('templates');
   if (!ts.length) {
     ts = DEFAULT_TEMPLATES.map((t, i) => ({ id: '0' + i, ...t })); // 기본 순서 유지 (새로 만든 유형은 뒤로)
@@ -401,10 +413,13 @@ async function templates() {
 
 // ---------- 화면 전환 ----------
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => go(b.dataset.v));
+let cur = { v: 'new' };
 function go(v, arg) {
+  cur = { v, arg };
+  document.body.classList.toggle('noteam', v === 'team');
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', v.startsWith(b.dataset.v.slice(0, 6))));
   window.scrollTo(0, 0);
-  ({ new: viewNew, records: viewRecords, record: viewRecord, templates: viewTemplates, template: viewTemplate, people: viewPeople })[v](arg);
+  ({ new: viewNew, records: viewRecords, record: viewRecord, templates: viewTemplates, template: viewTemplate, people: viewPeople, team: viewTeam })[v](arg);
 }
 
 // ---------- 참석자 명단 (직원이 대부분 고정이라 저장해 두고, 서명할 때 이름만 누른다) ----------
@@ -416,7 +431,7 @@ async function roster() {
   }
   return r.names;
 }
-const saveRoster = names => put('meta', { id: 'roster', names });
+const saveRoster = names => { markShared(); return put('meta', { id: 'roster', names }); };
 
 // ---------- 오늘 조회 (작성 중인 내용은 자동 임시저장) ----------
 let draft, moreOpen = {}, step = 1;
@@ -767,8 +782,7 @@ async function viewRecords(arg) {
     bindSwipe($('#list'));
     $('#list').querySelectorAll('[data-delrec]').forEach(b => b.onclick = async () => {
       const r = recs.find(x => x.id === b.dataset.delrec);
-      if (!confirm(`${r.date} ${r.site}\n이 조회 기록을 삭제할까요? 되돌릴 수 없습니다.${DRIVE_URL ? '\n(구글 드라이브에 올라간 백업본은 남아 있습니다)' : ''}`)) return;
-      await del('records', r.id); viewRecords();
+      if (await deleteRecord(r)) viewRecords();
     });
     $('#list').querySelectorAll('[data-day]').forEach(b => b.onclick = () => { calDay = b.dataset.day; draw(); });
     $('#list').querySelectorAll('[data-mon]').forEach(b => b.onclick = () => {
@@ -849,10 +863,7 @@ async function viewRecord(id) {
     catch (e) { alert('PDF를 만들지 못했습니다. 인터넷에 연결된 상태로 앱을 한 번 다시 열어 주세요.'); b.disabled = false; b.textContent = 'PDF 만들기'; return; }
     offerFile($('#acts'), file);
   };
-  $('#delrec').onclick = async () => {
-    if (!confirm('이 조회 기록을 삭제할까요? 되돌릴 수 없습니다.')) return;
-    await del('records', id); go('records');
-  };
+  $('#delrec').onclick = async () => { if (await deleteRecord(r)) go('records'); };
 }
 
 // 공유는 사용자가 직접 누른 직후에만 허용되므로, 파일을 만든 뒤 버튼을 한 번 더 누르게 한다
@@ -870,37 +881,158 @@ function offerFile(host, file, onDone = () => {}) {
   };
 }
 
-// ---------- 백업 (기록이 폰 안에만 있어서, 파일로 내보내 카톡·드라이브에 보관하고 새 폰에서 불러온다) ----------
-// 구글 드라이브 자동 백업: 관리자 구글 계정의 Apps Script 웹앱 주소 (drive-backup.gs 참고).
-// 이 주소로는 정해진 폴더에 파일을 넣기만 할 수 있고, 드라이브를 읽을 수는 없다. 비워 두면 자동 백업 꺼짐.
+// ---------- 여러 폰 연동 (관리자 구글 드라이브가 공용 창고, drive-backup.gs 참고) ----------
+// 각 폰은 ① 자기가 쓴 기록을 올리고 ② 다른 폰 기록을 받아오고 ③ 직원 명단·체크리스트를 맞춘다.
+// 인터넷이 없으면 폰에 먼저 저장했다가 연결되면 맞춘다. 팀 코드를 모르면 읽기·쓰기 모두 막힌다.
 const DRIVE_URL = 'https://script.google.com/macros/s/AKfycbx-TQZ0uAt9zEq9W6n2pSV9sphGHMLwtjlNylJokBg5ExdwlKwiCQyw8XBoNp3TtK-n/exec';
 const recVer = r => r.closing ? r.closing.at : r.savedAt; // 종료 미팅이 추가되면 다시 올린다
 
-let syncing = false;
+async function api(action, extra = {}, code) {
+  code = code || ((await get('meta', 'team')) || {}).code;
+  const res = await fetch(DRIVE_URL, { method: 'POST', body: JSON.stringify({ app: 'tbm-safety', version: 2, code, action, ...extra }) });
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.error || 'failed');
+  return j;
+}
+
+async function deleteRecord(r) {
+  if (!confirm(`${r.date} ${r.site}\n이 조회 기록을 삭제할까요?${DRIVE_URL ? '\n모든 폰에서 사라지고, 구글 드라이브의 \'삭제됨\' 폴더에 보관됩니다.' : '\n되돌릴 수 없습니다.'}`)) return false;
+  await del('records', r.id);
+  if (DRIVE_URL) {
+    const q = ((await get('meta', 'deletedQ')) || { ids: [] }).ids;
+    await put('meta', { id: 'deletedQ', ids: [...q, r.id] });
+    syncDrive();
+  }
+  return true;
+}
+
+let syncing = false, syncAgain = false;
 async function syncDrive() {
-  if (!DRIVE_URL || syncing || !navigator.onLine) return;
+  if (!DRIVE_URL || !navigator.onLine || !(await get('meta', 'team'))) return;
+  if (syncing) { syncAgain = true; return; }
   syncing = true;
+  let changed = false;
   try {
     const synced = ((await get('meta', 'synced')) || { map: {} }).map;
-    const templates = await getAll('templates');
+    const saveSynced = () => put('meta', { id: 'synced', map: synced });
+    // ① 이 폰에서 지운 기록
+    const dq = ((await get('meta', 'deletedQ')) || { ids: [] }).ids;
+    while (dq.length) {
+      await api('delete', { id: dq[0] });
+      delete synced[dq.shift()];
+      await put('meta', { id: 'deletedQ', ids: dq }); await saveSynced();
+    }
+    // ② 이 폰에서 쓰거나 고친 기록 올리기
     for (const r of await getAll('records')) {
       if (synced[r.id] === recVer(r)) continue;
-      const res = await fetch(DRIVE_URL, { method: 'POST', body: JSON.stringify({ app: 'tbm-safety', version: 1, exportedAt: new Date().toISOString(), records: [r], templates, roster: await roster() }) });
-      if (!(await res.json()).ok) break;
-      synced[r.id] = recVer(r);
-      await put('meta', { id: 'synced', map: synced });
-      await put('meta', { id: 'driveAt', at: new Date().toISOString() });
+      await api('put', { record: r });
+      synced[r.id] = recVer(r); await saveSynced();
     }
-  } catch (e) { /* 인터넷이 끊기면 다음에 앱을 열거나 연결될 때 다시 올린다 */ }
+    // ③ 다른 폰 기록 받기 (지워진 기록은 이 폰에서도 지움)
+    const { index } = await api('list');
+    // 서버 목록에 없는 기록은 (예전에 올렸더라도) 다시 올린다
+    for (const r of await getAll('records')) if (!index[r.id]) {
+      await api('put', { record: r });
+      synced[r.id] = recVer(r); index[r.id] = { ver: recVer(r) };
+    }
+    const need = [];
+    for (const [id, m] of Object.entries(index)) {
+      if (m.deleted) { if (await get('records', id)) { await del('records', id); changed = true; } delete synced[id]; }
+      else if (synced[id] !== m.ver) need.push(id);
+    }
+    for (let i = 0; i < need.length; i += 5) {
+      const { records } = await api('get', { ids: need.slice(i, i + 5) });
+      for (const r of records) { await put('records', r); synced[r.id] = recVer(r); changed = true; }
+      await saveSynced();
+    }
+    await saveSynced();
+    // ④ 직원 명단·체크리스트
+    if (await syncShared()) changed = true;
+    await put('meta', { id: 'driveAt', at: new Date().toISOString() });
+  } catch (e) {
+    if (e.message === 'bad code') { await del('meta', 'team'); go('team'); }
+    /* 인터넷이 끊기면 다음에 앱을 열거나 연결될 때 다시 맞춘다 */
+  }
   syncing = false;
+  if (changed && ['records', 'templates', 'people'].includes(cur.v)) ({ records: viewRecords, templates: viewTemplates, people: viewPeople })[cur.v](cur.arg);
+  if (syncAgain) { syncAgain = false; syncDrive(); }
 }
 addEventListener('online', syncDrive);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncDrive(); });
+
+// 직원 명단·체크리스트: 누구나 고칠 수 있고 나중에 고친 쪽이 반영된다.
+// 이 폰이 처음 연결될 땐 덮어쓰지 않고 합친다 (어느 폰의 명단도 날아가지 않게).
+async function syncShared() {
+  const dirty = await get('meta', 'sharedDirty'), applied = (await get('meta', 'sharedAt') || {}).at;
+  const { shared } = await api('getShared');
+  const push = async () => {
+    const at = new Date().toISOString();
+    await api('putShared', { shared: { updatedAt: at, templates: await getAll('templates'), roster: await roster() } });
+    await del('meta', 'sharedDirty'); await put('meta', { id: 'sharedAt', at });
+  };
+  if (!shared) { await push(); return false; }
+  if (!applied) { // 첫 연결: 합치기
+    quiet = true;
+    try {
+      for (const t of shared.templates) await put('templates', t);
+      await put('meta', { id: 'roster', names: [...new Set([...shared.roster, ...(await roster())])] });
+      await put('meta', { id: 'tpl-v2' });
+    } finally { quiet = false; }
+    await push();
+    return true;
+  }
+  if (dirty && dirty.at > shared.updatedAt) { await push(); return false; }
+  if (shared.updatedAt !== applied) { // 다른 폰에서 고친 내용을 그대로 받기
+    quiet = true;
+    try {
+      for (const t of await getAll('templates')) if (!shared.templates.some(x => x.id === t.id)) await del('templates', t.id);
+      for (const t of shared.templates) await put('templates', t);
+      await put('meta', { id: 'roster', names: shared.roster });
+      await put('meta', { id: 'tpl-v2' });
+    } finally { quiet = false; }
+    await del('meta', 'sharedDirty'); await put('meta', { id: 'sharedAt', at: shared.updatedAt });
+    return true;
+  }
+  return false;
+}
+
+// 처음 한 번 팀 코드 입력
+async function viewTeam() {
+  app.innerHTML = `
+    <div class="title-row"><h1 class="page-title">팀 연결</h1></div>
+    <p class="hint-text" style="margin:0 0 16px">회사 팀 코드를 입력하면 이 폰이 다른 직원 폰들과 조회 기록·직원 명단·체크리스트를 함께 씁니다. 처음 한 번만 입력하면 돼요.</p>
+    <div class="card">
+      <label class="f" for="teamcode" style="margin-top:0">팀 코드</label>
+      <input type="text" id="teamcode" inputmode="numeric" autocomplete="off" placeholder="관리자에게 받은 코드">
+      <button class="btn full" id="join" style="margin-top:14px">연결하기</button>
+      <p class="hint-text" id="joinmsg" style="margin:12px 0 0"></p>
+    </div>`;
+  const join = async () => {
+    const code = $('#teamcode').value.trim();
+    if (!code) return;
+    if (!navigator.onLine) return $('#joinmsg').textContent = '인터넷이 연결된 곳에서 처음 한 번 연결해 주세요.';
+    $('#join').disabled = true; $('#joinmsg').textContent = '확인 중…';
+    try {
+      await api('ping', {}, code);
+      await put('meta', { id: 'team', code });
+      $('#joinmsg').textContent = '연결됐어요. 기록을 받아오는 중…';
+      await syncDrive();
+      go('new');
+    } catch (e) {
+      $('#join').disabled = false;
+      $('#joinmsg').textContent = e.message === 'bad code' ? '팀 코드가 맞지 않아요. 다시 확인해 주세요.' : '연결하지 못했어요. 인터넷 연결을 확인해 주세요.';
+    }
+  };
+  $('#join').onclick = join;
+  $('#teamcode').onkeydown = e => { if (e.key === 'Enter') join(); };
+}
 
 async function backupState() {
   const recs = await getAll('records');
   if (DRIVE_URL) {
     const synced = ((await get('meta', 'synced')) || { map: {} }).map, last = await get('meta', 'driveAt');
-    return { drive: true, count: recs.length, last: last ? last.at : '', pending: recs.filter(r => synced[r.id] !== recVer(r)).length };
+    const dq = ((await get('meta', 'deletedQ')) || { ids: [] }).ids;
+    return { drive: true, count: recs.length, last: last ? last.at : '', pending: recs.filter(r => synced[r.id] !== recVer(r)).length + dq.length };
   }
   const last = await get('meta', 'lastBackup');
   const since = last ? last.at : '';
@@ -941,28 +1073,33 @@ async function restoreBackup(files) {
 // 제목 오른쪽의 작은 백업 상태 배지. 누르면 바텀시트로 설명·버튼
 function backupChip(st) {
   const cls = st.pending ? 'warn' : st.count ? 'ok' : '';
-  const txt = st.pending ? `${st.drive ? '업로드 대기' : '백업 필요'} ${st.pending}건`
-    : st.last ? `백업됨 ${stamp(st.last)}` : st.drive ? '자동 백업 켜짐' : '백업 안 함';
+  const txt = st.pending ? `${st.drive ? '올릴 것' : '백업 필요'} ${st.pending}건`
+    : st.last ? `${st.drive ? '동기화' : '백업'} ${stamp(st.last)}` : st.drive ? '연동 켜짐' : '백업 안 함';
   return `<button class="bk-chip ${cls}" id="bkchip">${I.cloud}${txt}</button>`;
 }
 
 function openBackupSheet(st) {
-  const lastTxt = st.last ? `마지막 ${st.drive ? '업로드' : '백업'} ${stamp(st.last)}` : `아직 ${st.drive ? '업로드' : '백업'}한 적 없음`;
+  const lastTxt = st.last ? `마지막 동기화 ${stamp(st.last)}` : '아직 동기화한 적 없음';
   const hint = st.drive
-    ? '구글 드라이브 자동 백업이 켜져 있습니다. 조회를 저장하거나 종료 미팅을 쓰면 자동으로 올라갑니다. 인터넷이 없으면 연결될 때 올라갑니다.'
+    ? '여러 폰이 구글 드라이브로 연동되어 있습니다. 누가 조회를 저장하든 모든 폰의 지난 기록에 보이고, 직원 명단·체크리스트도 함께 바뀝니다. 인터넷이 없으면 연결될 때 맞춰집니다.'
     : "기록은 이 폰 안에만 저장됩니다. 백업 파일을 카톡 '나와의 채팅'이나 구글 드라이브에 보관하세요.";
   $('#modal').innerHTML = `<div class="modal"><div class="sheet">
     <div class="grab"></div>
-    <h2>${st.drive ? '자동 백업' : '기록 백업'}</h2>
-    <p class="page-sub">${hint}<br><b style="color:var(--ink)">${lastTxt}</b>${st.pending ? ` · <b style="color:var(--warn-text)">${st.drive ? '업로드 대기' : '백업 안 된 기록'} ${st.pending}건</b>` : ''}</p>
+    <h2>${st.drive ? '연동·백업' : '기록 백업'}</h2>
+    <p class="page-sub">${hint}<br><b style="color:var(--ink)">${lastTxt}</b>${st.pending ? ` · <b style="color:var(--warn-text)">${st.drive ? '올릴 것' : '백업 안 된 기록'} ${st.pending}건</b>` : ''}</p>
     <p class="hint-text" style="margin:0 0 12px">폰을 바꾸면 새 폰에서 '백업 불러오기'로 백업 파일을 고르면 복원됩니다.</p>
     <div class="actions" id="bkacts" style="margin:0 0 8px">
       <button class="btn" id="mkbackup">백업 파일 만들기</button>
       <label class="btn ter">백업 불러오기<input type="file" id="restore" accept=".txt,.json,text/plain,application/json" multiple hidden></label>
     </div>
+    ${st.drive ? `<div class="row" style="margin-bottom:4px"><button class="btn ter grow" id="syncnow">지금 맞추기</button><button class="btn ter grow" id="reteam">팀 코드 다시 입력</button></div>` : ''}
     <button class="btn link full" id="bkclose">닫기</button>
   </div></div>`;
   const close = () => $('#modal').innerHTML = '';
+  if (st.drive) {
+    $('#syncnow').onclick = async () => { $('#syncnow').textContent = '맞추는 중…'; await syncDrive(); close(); viewRecords(); };
+    $('#reteam').onclick = async () => { if (!confirm('이 폰의 팀 연결을 끊고 코드를 다시 입력할까요? (이 폰의 기록은 그대로 남아요)')) return; await del('meta', 'team'); close(); go('team'); };
+  }
   $('#bkclose').onclick = close;
   $('.modal').onclick = e => { if (e.target.classList.contains('modal')) close(); };
   $('#mkbackup').onclick = async () => {
@@ -1091,8 +1228,10 @@ async function viewTemplate(id) {
   };
 }
 
-go('new');
-syncDrive();
+(async () => {
+  if (DRIVE_URL && !(await get('meta', 'team'))) go('team');
+  else { go('new'); syncDrive(); }
+})();
 </script>
 </body>
 </html>

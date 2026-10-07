@@ -180,6 +180,8 @@
     @page { size:A4; margin:12mm; }
   }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
 </head>
 <body>
 <header><span class="mark">TBM</span><span class="name">안전조회</span><span class="off">오프라인</span></header>
@@ -508,16 +510,63 @@ async function viewRecord(id) {
       </table>
       ${r.photos.length ? `<p class="cap">조회 인증 사진</p><div class="photos">${r.photos.map(p => `<div class="ph"><img src="${p}" alt=""></div>`).join('')}</div>` : ''}
     </div>
-    <div class="actions noprint">
+    <div class="actions noprint" id="acts">
       <button class="btn danger" id="delrec">삭제</button>
-      <button class="btn" id="print" style="flex:2">PDF 저장·인쇄</button>
+      <button class="btn" id="mkpdf" style="flex:2">PDF 만들기</button>
     </div>`;
   $('#back').onclick = () => go('records');
-  $('#print').onclick = () => window.print();
+  $('#mkpdf').onclick = async () => {
+    const b = $('#mkpdf');
+    b.disabled = true; b.textContent = 'PDF 만드는 중…';
+    let file;
+    try { file = await makePdf(r); }
+    catch (e) { alert('PDF를 만들지 못했습니다. 인터넷에 연결된 상태로 앱을 한 번 다시 열어 주세요.'); b.disabled = false; b.textContent = 'PDF 만들기'; return; }
+    // 공유는 사용자가 직접 누른 직후에만 허용되므로, 만든 뒤 버튼을 한 번 더 누르게 한다
+    const canShare = navigator.canShare && navigator.canShare({ files: [file] });
+    $('#acts').innerHTML = `${canShare ? '<button class="btn" id="sharepdf">공유하기 (카톡·파일 저장)</button>' : ''}
+      <button class="btn ${canShare ? 'ter' : ''}" id="savepdf">기기에 저장</button>`;
+    if (canShare) $('#sharepdf').onclick = () => navigator.share({ files: [file], title: file.name }).catch(() => {});
+    $('#savepdf').onclick = () => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(file); a.download = file.name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    };
+  };
   $('#delrec').onclick = async () => {
     if (!confirm('이 조회 기록을 삭제할까요? 되돌릴 수 없습니다.')) return;
     await del('records', id); go('records');
   };
+}
+
+// 인쇄창(window.print)은 홈 화면 앱·카톡 브라우저에서 안 열려서, 기록 문서를 A4 이미지로 그려 PDF 파일을 직접 만든다
+async function makePdf(r) {
+  const W = 794, PAGE = 1123, M = 40; // A4 = 794×1123 CSS px, 여백 40px
+  const wrap = document.createElement('div');
+  wrap.style.cssText = `position:fixed;left:-10000px;top:0;width:${W}px;padding:0 ${M}px;background:#fff;`;
+  wrap.innerHTML = `<div class="doc">${$('.doc').innerHTML}</div>`;
+  document.body.appendChild(wrap);
+  try {
+    await Promise.all([...wrap.querySelectorAll('img')].map(i => i.complete || new Promise(ok => i.onload = i.onerror = ok)));
+    // 표 행·사진 중간에서 페이지가 잘리지 않도록 끊을 수 있는 위치를 모은다
+    const top = wrap.getBoundingClientRect().top, total = wrap.scrollHeight;
+    const cuts = [...wrap.querySelectorAll('h2, tr, table, .ph')].map(e => Math.ceil(e.getBoundingClientRect().bottom - top)).concat(total).sort((a, b) => a - b);
+    const S = 2, canvas = await html2canvas(wrap, { scale: S, backgroundColor: '#ffffff' });
+    const pdf = new jspdf.jsPDF({ unit: 'pt', format: 'a4' });
+    const k = pdf.internal.pageSize.getWidth() / W, H = PAGE - 2 * M;
+    for (let y0 = 0, first = true; y0 < total; first = false) {
+      let y1 = Math.max(...cuts.filter(c => c > y0 && c <= y0 + H));
+      if (!isFinite(y1)) y1 = Math.min(y0 + H, total);
+      const pc = document.createElement('canvas');
+      pc.width = canvas.width; pc.height = (y1 - y0) * S;
+      pc.getContext('2d').drawImage(canvas, 0, y0 * S, pc.width, pc.height, 0, 0, pc.width, pc.height);
+      if (!first) pdf.addPage();
+      pdf.addImage(pc.toDataURL('image/jpeg', 0.92), 'JPEG', 0, M * k, W * k, (y1 - y0) * k);
+      y0 = y1;
+    }
+    const name = `TBM_${r.date}_${r.site}.pdf`.replace(/[\\/:*?"<>|]/g, '_');
+    return new File([pdf.output('blob')], name, { type: 'application/pdf' });
+  } finally { wrap.remove(); }
 }
 
 // ---------- 체크리스트(작업 유형별 템플릿) 편집 ----------

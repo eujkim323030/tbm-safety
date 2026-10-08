@@ -431,8 +431,10 @@ function go(v, arg) {
 // ---------- 참석자 명단 (직원이 대부분 고정이라 저장해 두고, 서명할 때 이름만 누른다) ----------
 async function roster() {
   let r = await get('meta', 'roster');
-  if (!r) { // 처음엔 지난 기록에 서명했던 이름으로 채운다
-    r = { id: 'roster', names: [...new Set((await getAll('records')).flatMap(x => x.signs.map(s => s.name)))] };
+  if (!r) { // 혼자 쓰던 폰만 지난 기록에 서명했던 이름으로 채운다. 팀에 연결된 폰은 팀 명단을 받아 쓴다
+    // (팀 기록엔 테스트·삭제된 기록의 서명자도 섞여 있어, 여기서 채우면 가짜 이름이 공용 명단으로 퍼진다)
+    const names = (await get('meta', 'team')) ? [] : [...new Set((await getAll('records')).flatMap(x => x.signs.map(s => s.name)))];
+    r = { id: 'roster', names };
     await put('meta', r);
   }
   return r.names;
@@ -961,7 +963,8 @@ async function syncDrive() {
     syncFailed = true; /* 인터넷이 끊기면 다음에 앱을 열거나 연결될 때 다시 맞춘다 */
   }
   syncing = false; refreshChip();
-  if (changed && ['records', 'templates', 'people'].includes(cur.v)) ({ records: viewRecords, templates: viewTemplates, people: viewPeople })[cur.v](cur.arg);
+  const typing = app.contains(document.activeElement) && /INPUT|TEXTAREA/.test(document.activeElement.tagName);
+  if (changed && !typing && ['records', 'templates', 'people'].includes(cur.v)) ({ records: viewRecords, templates: viewTemplates, people: viewPeople })[cur.v](cur.arg);
   if (syncAgain) { syncAgain = false; syncDrive(); }
 }
 addEventListener('online', syncDrive);
@@ -1174,6 +1177,7 @@ async function viewTemplates() {
     const t = { id: uid(), name: '새 작업 유형', items: [] };
     await put('templates', t); go('template', t.id);
   };
+  syncDrive(); // 들어올 때마다 다른 폰에서 고친 체크리스트를 받아옴
 }
 
 // ---------- 직원 관리 (참석자 명단) ----------
@@ -1206,6 +1210,7 @@ async function viewPeople() {
   };
   $('#addPerson').onclick = add;
   $('#newPerson').onkeydown = e => { if (e.key === 'Enter') add(); };
+  syncDrive(); // 들어올 때마다 다른 폰에서 고친 명단을 받아옴
 }
 
 async function viewTemplate(id) {

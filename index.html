@@ -879,14 +879,23 @@ function offerFile(host, file, onDone = () => {}) {
   const canShare = navigator.canShare && navigator.canShare({ files: [file] });
   host.innerHTML = `${canShare ? '<button class="btn" data-share>공유하기 (카톡·드라이브)</button>' : ''}
     <button class="btn ${canShare ? 'ter' : ''}" data-save>기기에 저장</button>`;
-  if (canShare) host.querySelector('[data-share]').onclick = () => navigator.share({ files: [file], title: file.name }).then(onDone, () => {});
-  host.querySelector('[data-save]').onclick = () => {
+  const save = () => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(file); a.download = file.name;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 60000);
     onDone();
   };
+  // 안드로이드에선 파일과 제목을 같이 보내면 카톡 등이 글자만 받고 파일을 버려서, 파일만 보낸다
+  if (canShare) host.querySelector('[data-share]').onclick = async () => {
+    try { await navigator.share({ files: [file] }); onDone(); }
+    catch (e) {
+      if (e.name === 'AbortError') return; // 공유창을 그냥 닫은 경우
+      alert(`이 폰에서는 바로 공유가 안 돼서 대신 기기에 저장할게요. (${e.name})\n카톡에서 + → 파일 → 다운로드 폴더의 파일을 보내 주세요.`);
+      save();
+    }
+  };
+  host.querySelector('[data-save]').onclick = save;
 }
 
 // ---------- 여러 폰 연동 (관리자 구글 드라이브가 공용 창고, drive-backup.gs 참고) ----------
@@ -1155,7 +1164,7 @@ async function makePdf(r) {
       pdf.addImage(pc.toDataURL('image/jpeg', 0.92), 'JPEG', 0, M * k, W * k, (y1 - y0) * k);
       y0 = y1;
     }
-    const name = `TBM_${r.date}_${r.site}.pdf`.replace(/[\\/:*?"<>|]/g, '_');
+    const name = `TBM_${r.date}_${r.site}.pdf`.replace(/[\\/:*?"<>|\s]+/g, '_'); // 띄어쓰기도 _ (일부 안드로이드 앱이 파일명 공백을 못 받음)
     return new File([pdf.output('blob')], name, { type: 'application/pdf' });
   } finally { wrap.remove(); }
 }

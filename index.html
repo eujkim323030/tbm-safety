@@ -36,6 +36,8 @@
   body.offline .offbar { display:block; }
 
   main { padding:calc(20px + env(safe-area-inset-top)) 16px 16px; max-width:640px; margin:0 auto; }
+  .ver { text-align:center; font-size:12px; color:var(--mute); margin:8px 0 16px; }
+  body.noteam .ver { display:none; }
   body.offline main { padding-top:20px; }
   .page-title { font-size:30px; font-weight:900; letter-spacing:-.6px; line-height:1.15; margin:8px 0 4px; }
   .page-sub { color:var(--body); font-size:14px; margin-bottom:20px; }
@@ -254,7 +256,7 @@
 
   @media print {
     body { background:#fff; padding:0; font-size:12px; }
-    .offbar, nav, .noprint { display:none !important; }
+    .offbar, nav, .noprint, .ver { display:none !important; }
     main { padding:0; max-width:none; }
     .card { padding:0; border-radius:0; }
     .doc table { break-inside:avoid; }
@@ -268,6 +270,7 @@
 <body>
 <div class="offbar">오프라인 · 인터넷 없이도 작성·저장됩니다</div>
 <main id="app"></main>
+<p class="ver" id="ver"></p>
 <nav>
   <button data-v="new"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg>오늘 조회</button>
   <button data-v="records"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>지난 기록</button>
@@ -901,6 +904,9 @@ function offerFile(host, file, onDone = () => {}) {
 // ---------- 여러 폰 연동 (관리자 구글 드라이브가 공용 창고, drive-backup.gs 참고) ----------
 // 각 폰은 ① 자기가 쓴 기록을 올리고 ② 다른 폰 기록을 받아오고 ③ 직원 명단·체크리스트를 맞춘다.
 // 인터넷이 없으면 폰에 먼저 저장했다가 연결되면 맞춘다. 팀 코드를 모르면 읽기·쓰기 모두 막힌다.
+// 앱 버전: 모든 화면 맨 아래에 표시 (아빠 폰이 새 버전인지 확인용). 배포할 때 sw.js의 VERSION과 같이 올린다
+const APP_VERSION = 26;
+$('#ver').textContent = `앱 버전 ${APP_VERSION}`;
 const DRIVE_URL = 'https://script.google.com/macros/s/AKfycbx-TQZ0uAt9zEq9W6n2pSV9sphGHMLwtjlNylJokBg5ExdwlKwiCQyw8XBoNp3TtK-n/exec';
 const recVer = r => r.closing ? r.closing.at : r.savedAt; // 종료 미팅이 추가되면 다시 올린다
 

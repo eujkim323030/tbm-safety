@@ -979,40 +979,57 @@ async function syncDrive() {
 addEventListener('online', syncDrive);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncDrive(); });
 
-// 직원 명단·체크리스트: 누구나 고칠 수 있고 나중에 고친 쪽이 반영된다.
-// 이 폰이 처음 연결될 땐 덮어쓰지 않고 합친다 (어느 폰의 명단도 날아가지 않게).
+// 직원 명단·체크리스트: 누구나 고칠 수 있다.
+// 통째로 '나중에 고친 쪽이 이김'으로 하면, 현장에서 인터넷 없이 추가한 작업 유형이 다른 폰의 명단 수정에 덮여 사라진다.
+// 그래서 마지막으로 맞췄던 내용(base)과 비교해 이 폰에서 바뀐 것·다른 폰에서 바뀐 것을 항목별로 합친다.
+// base가 없으면(첫 연결·예전 버전) 빈 것으로 보고 합집합 — 무엇도 지우지 않는다.
+const tplKey = t => t ? JSON.stringify([t.name, t.items]) : null;
+function mergeShared(base, local, remote) {
+  const B = new Map(base.templates.map(t => [t.id, t])), L = new Map(local.templates.map(t => [t.id, t])), R = new Map(remote.templates.map(t => [t.id, t]));
+  const templates = [];
+  for (const id of new Set([...R.keys(), ...L.keys()])) {
+    const b = tplKey(B.get(id)), l = L.get(id), r = R.get(id);
+    const t = tplKey(l) === b ? r          // 이 폰은 안 바꿈 → 다른 폰 것 (지워졌으면 없음)
+      : tplKey(r) === b ? l                // 다른 폰은 안 바꿈 → 이 폰 것 (지웠으면 없음)
+      : l || r;                            // 둘 다 바꿈 → 이 폰 것, 한쪽이 지웠으면 남은 쪽
+    if (t) templates.push(t);
+  }
+  const inB = new Set(base.roster), inL = new Set(local.roster), inR = new Set(remote.roster);
+  const roster = [...new Set([...remote.roster, ...local.roster])].filter(n => !(inB.has(n) && (!inL.has(n) || !inR.has(n)))); // 어느 쪽이든 뺀 이름은 빠짐
+  return { templates, roster };
+}
+const sameShared = (a, b) => JSON.stringify([a.templates.map(t => [t.id, tplKey(t)]), a.roster]) === JSON.stringify([b.templates.map(t => [t.id, tplKey(t)]), b.roster]);
+
 async function syncShared() {
   const dirty = await get('meta', 'sharedDirty'), applied = (await get('meta', 'sharedAt') || {}).at;
   const { shared } = await api('getShared');
-  const push = async () => {
-    const at = new Date().toISOString();
-    await api('putShared', { shared: { updatedAt: at, templates: await getAll('templates'), roster: await roster() } });
-    await del('meta', 'sharedDirty'); await put('meta', { id: 'sharedAt', at });
-  };
-  if (!shared) { await push(); return false; }
-  if (!applied) { // 첫 연결: 합치기
+  if (shared && !dirty && shared.updatedAt === applied) return false; // 양쪽 다 그대로
+  const base = (applied && (await get('meta', 'sharedBase'))) || { templates: [], roster: [] };
+  const local = { templates: await getAll('templates'), roster: await roster() };
+  const remote = shared || { templates: [], roster: [] };
+  const merged = mergeShared(base, local, remote);
+  // 합치는 사이에 이 폰에서 또 고쳤으면 덮어쓰지 말고 다음에 다시
+  const dirtyNow = await get('meta', 'sharedDirty');
+  if ((dirtyNow && dirtyNow.at) !== (dirty && dirty.at)) { syncAgain = true; return false; }
+  let at = remote.updatedAt;
+  if (!shared || !sameShared(merged, remote)) {
+    at = new Date().toISOString();
+    await api('putShared', { shared: { updatedAt: at, ...merged } });
+  }
+  const changed = !sameShared(merged, local);
+  if (changed) {
     quiet = true;
     try {
-      for (const t of shared.templates) await put('templates', t);
-      await put('meta', { id: 'roster', names: [...new Set([...shared.roster, ...(await roster())])] });
+      for (const t of local.templates) if (!merged.templates.some(x => x.id === t.id)) await del('templates', t.id);
+      for (const t of merged.templates) await put('templates', t);
+      await put('meta', { id: 'roster', names: merged.roster });
       await put('meta', { id: 'tpl-v2' });
     } finally { quiet = false; }
-    await push();
-    return true;
   }
-  if (dirty && dirty.at > shared.updatedAt) { await push(); return false; }
-  if (shared.updatedAt !== applied) { // 다른 폰에서 고친 내용을 그대로 받기
-    quiet = true;
-    try {
-      for (const t of await getAll('templates')) if (!shared.templates.some(x => x.id === t.id)) await del('templates', t.id);
-      for (const t of shared.templates) await put('templates', t);
-      await put('meta', { id: 'roster', names: shared.roster });
-      await put('meta', { id: 'tpl-v2' });
-    } finally { quiet = false; }
-    await del('meta', 'sharedDirty'); await put('meta', { id: 'sharedAt', at: shared.updatedAt });
-    return true;
-  }
-  return false;
+  await put('meta', { id: 'sharedBase', ...merged });
+  await put('meta', { id: 'sharedAt', at });
+  await del('meta', 'sharedDirty');
+  return changed;
 }
 
 // 처음 한 번 팀 코드 입력
